@@ -1,0 +1,6 @@
+path: /home/juliodev/Downloads/varquejada-detection2.v1-varquejada.yolov8
+train: train/images
+val: valid/images
+
+nc: 2
+names: ['Boi', 'Cavalo']

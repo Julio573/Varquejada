@@ -1,0 +1,7 @@
+path: /home/juliodev/Downloads/Varquejada_System/training/dataset
+train: images/train
+val: images/val
+
+names:
+  0: boi
+  1: faixa

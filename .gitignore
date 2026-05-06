@@ -1,0 +1,41 @@
+# Datasets e Pesos Pesados
+dataset/
+training/data/
+runs/
+!models/best.pt
+yolo11n.pt
+
+# Media para testes (Vídeos)
+*.mp4
+*.avi
+*.mkv
+*.mov
+*.wmv
+assets/*.mp4
+capture/*.mp4
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+build/
+dist/
+*.egg-info/
+
+# Logs e Performance
+logs/
+*.log
+.benchmarks/
+
+# IDEs
+.vscode/
+.idea/
+.project
+.pydevproject
+
+# OS
+.DS_Store
+Thumbs.db
+
