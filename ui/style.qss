@@ -47,7 +47,7 @@ QWidget {
 
 /* --- VIDEO PLAYER --- */
 #video_container {
-    background-color: #000000;
+    background-color: transparent;
     border-radius: 24px;
     border: 1px solid #1a1c26;
 }
@@ -99,34 +99,36 @@ QGroupBox {
     border: 1px solid #1a1c26;
 }
 
-/* Estado Flutuante para Tela Cheia - Transparência Estrita com Alta Visibilidade */
+/* Estado Flutuante para Tela Cheia - Transparência Glassmorphism para Visibilidade */
 #transport_container.floating-transport {
-    background-color: transparent !important;
-    background: none !important;
-    border: none !important;
+    background-color: rgba(18, 20, 29, 230) !important; /* Midnight semi-transparente */
+    border: 1px solid rgba(255, 255, 255, 30) !important;
+    border-radius: 20px;
+    backdrop-filter: blur(10px);
 }
 
-/* Legibilidade Extrema para Modo Transparente */
+/* Legibilidade Extrema para Modo Flutuante */
 #transport_container.floating-transport QLabel {
     color: #FFFFFF !important;
-    font-weight: 900;
-    /* Sombra para ler sobre qualquer imagem */
-    text-shadow: 2px 2px 5px rgba(0, 0, 0, 255), -1px -1px 0px rgba(0,0,0,150);
+    font-weight: 700;
 }
 
 #transport_container.floating-transport QPushButton {
-    background-color: rgba(15, 20, 30, 180) !important; /* Fundo escuro mais forte apenas no botão */
-    border: 1px solid rgba(255, 255, 255, 60) !important;
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
     border-radius: 12px;
     color: #FFFFFF !important;
-    /* Efeito de elevação */
-    box-shadow: 0 4px 15px rgba(0,0,0,200);
 }
 
-/* Timeline mais robusta para modo transparente */
+#transport_container.floating-transport #btn_pause_float {
+    background-color: #f0913a !important; /* Mantém o destaque âmbar */
+    color: #000000 !important;
+}
+
+/* Timeline mais robusta para modo flutuante */
 #transport_container.floating-transport #video_slider::groove:horizontal {
     height: 6px;
-    background: rgba(255, 255, 255, 40);
+    background: rgba(255, 255, 255, 0.1);
 }
 
 #transport_container.floating-transport #video_slider::sub-page:horizontal {
@@ -177,16 +179,57 @@ QGroupBox {
 }
 
 #btn_pause_float {
-    background-color: #f0913a;
+    background-color: #ffae57; /* Âmbar mais claro e brilhante */
+    color: #1a1c26;            /* Midnight (Ícone) */
     border: none;
-    border-radius: 24px;
-    width: 48px;
-    height: 48px;
-    min-width: 48px;
-    min-height: 48px;
-    font-size: 20px; /* Ajustado para o triângulo clássico */
+    border-radius: 28px;
+    width: 56px;
+    height: 56px;
+    min-width: 56px;
+    min-height: 56px;
+    font-size: 24px;
     padding: 0px;
     text-align: center;
+}
+
+#btn_pause_float:hover {
+    background-color: rgba(255, 174, 87, 0.9); /* Novo âmbar com 90% de opacidade */
+}
+
+#btn_pause_float:pressed {
+    background-color: #e69542;
+}
+
+#btn_prev_f, #btn_next_f {
+    font-size: 32px;
+    color: #FFFFFF;
+    background: transparent;
+    border: none;
+    width: 48px;
+    height: 48px;
+    margin: 0 10px;
+}
+
+#btn_prev_f:hover, #btn_next_f:hover {
+    color: #ffae57;
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 24px;
+}
+
+#btn_prev_f:pressed, #btn_next_f:pressed {
+    background-color: rgba(255, 174, 87, 0.2);
+    transform: scale(0.95);
+}
+
+/* --- OSD (YouTube Style) --- */
+#osd_label {
+    background-color: rgba(0, 0, 0, 0.6); /* Fundo escuro semi-transparente para contraste */
+    border-radius: 12px;
+    padding: 20px;
+    color: #FFFFFF;
+    font-size: 32px;
+    font-weight: 900;
+    font-family: 'Space Grotesk', sans-serif;
 }
 
 #lbl_timecode {
@@ -207,6 +250,19 @@ QGroupBox {
 #btn_vol_icon:hover {
     background-color: rgba(255, 255, 255, 0.1);
     border-radius: 4px;
+}
+
+#btn_fullscreen_player {
+    background-color: transparent;
+    border: none;
+    color: #FFFFFF;
+    font-size: 20px;
+}
+
+#btn_fullscreen_player:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    color: #f0913a;
 }
 
 /* --- QUICK VERDICT BUTTONS --- */
