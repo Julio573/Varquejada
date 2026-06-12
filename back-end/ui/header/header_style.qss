@@ -1,0 +1,80 @@
+/* Header Principal */
+#Header {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 #09101D,
+        stop:0.5 #0C1528,
+        stop:1 #09101D
+    );
+    border-bottom: 2px solid #FF8C00;
+}
+
+/* Logo */
+#LogoLabel {
+    font-family: "Inter", "Segoe UI", Arial;
+    font-size: 26px;
+    font-weight: 700;
+}
+
+#LogoSubtitle {
+    font-family: "Inter", "Segoe UI", Arial;
+    font-size: 12px;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.65);
+}
+
+/* Cards de Informação */
+#HeaderCard {
+    background-color: #101A2F;
+    border: 1px solid #1E335A;
+    border-radius: 16px;
+}
+
+/* Container do Ícone dentro do Card */
+#IconContainer {
+    background-color: #131E34;
+    border: 1px solid #1D3358;
+    border-radius: 12px;
+}
+
+/* Tipografia dos Cards */
+#CardTitle {
+    font-family: "Inter", "Segoe UI", Arial;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    color: rgba(255, 255, 255, 0.55); /* 140/255 ~= 0.55 */
+    text-transform: uppercase;
+}
+
+#CardValue {
+    font-family: "Inter", "Segoe UI", Arial;
+    font-size: 28px;
+    font-weight: 700;
+    color: #FFFFFF;
+}
+
+#CardSubtext {
+    font-family: "Inter", "Segoe UI", Arial;
+    font-size: 12px;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.40); /* 100/255 ~= 0.40 */
+}
+
+/* Botão Fechar */
+#CloseButton {
+    background: transparent;
+    color: #FFFFFF;
+    font-size: 18px;
+    font-weight: bold;
+    border: none;
+}
+
+#CloseButton:hover {
+    background-color: #E53935;
+    border-radius: 18px;
+}
+
+#CloseButton:pressed {
+    background-color: #C62828;
+}

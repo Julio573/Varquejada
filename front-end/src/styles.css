@@ -1,0 +1,100 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-success: var(--success);
+  --color-info: var(--info);
+  --color-warning: var(--warning);
+  --color-purple: var(--purple);
+  --color-pink: var(--pink);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --font-display: "Rajdhani", "Inter", system-ui, sans-serif;
+  --font-sans: "Inter", system-ui, sans-serif;
+}
+
+:root {
+  --radius: 0.75rem;
+
+  /* Dark-by-default cockpit theme */
+  --background: oklch(0.16 0.015 250);
+  --foreground: oklch(0.97 0.005 250);
+
+  --surface: oklch(0.21 0.018 250);
+  --surface-2: oklch(0.255 0.02 250);
+
+  --card: oklch(0.21 0.018 250);
+  --card-foreground: oklch(0.97 0.005 250);
+  --popover: oklch(0.21 0.018 250);
+  --popover-foreground: oklch(0.97 0.005 250);
+
+  --brand: oklch(0.72 0.18 55);             /* orange */
+  --brand-foreground: oklch(0.15 0.02 250);
+
+  --primary: oklch(0.72 0.18 55);
+  --primary-foreground: oklch(0.15 0.02 250);
+  --secondary: oklch(0.28 0.02 250);
+  --secondary-foreground: oklch(0.97 0.005 250);
+  --muted: oklch(0.26 0.018 250);
+  --muted-foreground: oklch(0.68 0.02 250);
+  --accent: oklch(0.28 0.02 250);
+  --accent-foreground: oklch(0.97 0.005 250);
+
+  --destructive: oklch(0.65 0.22 25);
+  --destructive-foreground: oklch(0.98 0.005 250);
+
+  --success: oklch(0.78 0.17 150);
+  --info: oklch(0.72 0.15 235);
+  --warning: oklch(0.82 0.16 85);
+  --purple: oklch(0.72 0.18 295);
+  --pink: oklch(0.74 0.18 350);
+
+  --border: oklch(0.3 0.018 250 / 60%);
+  --input: oklch(0.3 0.018 250);
+  --ring: oklch(0.72 0.18 55);
+
+  --gradient-speed: conic-gradient(from 180deg at 50% 100%, oklch(0.78 0.17 150) 0deg, oklch(0.82 0.16 85) 60deg, oklch(0.72 0.18 55) 110deg, oklch(0.65 0.22 25) 180deg);
+  --shadow-glow: 0 0 40px -10px oklch(0.72 0.18 55 / 50%);
+}
+
+@layer base {
+  * { border-color: var(--color-border); }
+  html, body, #root { height: 100%; }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    background-image:
+      radial-gradient(1200px 600px at -10% -10%, oklch(0.72 0.18 55 / 8%), transparent 60%),
+      radial-gradient(900px 500px at 110% 10%, oklch(0.72 0.15 235 / 6%), transparent 60%);
+  }
+  h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: 0.02em; }
+}
