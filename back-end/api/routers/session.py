@@ -82,6 +82,22 @@ async def open_camera(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.post("/close-source", response_model=SessionSnapshot)
+async def close_source(
+    manager: SessionManager = Depends(get_session_manager),
+    hub: SessionEventHub = Depends(get_session_event_hub),
+) -> SessionSnapshot:
+    try:
+        manager.close_source()
+        return await _emit_session_state(
+            manager,
+            hub,
+            action="close-source",
+        )
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.post("/pause", response_model=SessionSnapshot)
 async def pause_session(
     payload: PauseRequest,
@@ -180,3 +196,19 @@ async def reset_session(
 ) -> SessionSnapshot:
     manager.reset()
     return await _emit_session_state(manager, hub, action="reset")
+
+
+@router.post("/finish", response_model=SessionSnapshot)
+async def finish_session(
+    manager: SessionManager = Depends(get_session_manager),
+    hub: SessionEventHub = Depends(get_session_event_hub),
+) -> SessionSnapshot:
+    report_path = manager.finish_measurement()
+    if not report_path:
+        raise HTTPException(status_code=400, detail=manager.last_error or "Não foi possível encerrar a medição.")
+
+    return await _emit_session_state(
+        manager,
+        hub,
+        action="finish",
+    )

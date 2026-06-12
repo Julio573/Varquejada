@@ -6,7 +6,6 @@ import {
   Calendar,
   Settings,
   Video,
-  Crosshair,
   FileText,
   Clock,
   Ruler,
@@ -32,9 +31,11 @@ import {
   addBackendMarker,
   calibrateBackendSession,
   createBackendSessionSocket,
-  createBackendMediaUrl,
+  createBackendVideoFeedUrl,
+  closeBackendSource,
   fetchBackendHealth,
   fetchBackendSession,
+  downloadBackendSnapshot,
   openBackendCamera,
   openBackendVideo,
   resetBackendSession,
@@ -46,6 +47,7 @@ import {
   type BackendFrameEvent,
   type BackendSession,
 } from "@/lib/backend";
+import { loadAppSettings, saveLastSourcePath } from "@/lib/app-settings";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -144,117 +146,6 @@ function formatCaptureInfo(capture: BackendCapture | null) {
   };
 }
 
-function hasRenderableBox(telemetry: BackendFrameEvent["telemetry"] | null) {
-  const rawBox = telemetry?.horse_bbox ?? telemetry?.bbox;
-  return Array.isArray(rawBox) && rawBox.length >= 4;
-}
-
-function drawTrackingOverlay(
-  canvas: HTMLCanvasElement,
-  sourceWidth: number,
-  sourceHeight: number,
-  telemetry: BackendFrameEvent["telemetry"] | null,
-) {
-  const context = canvas.getContext("2d");
-  if (!context) return;
-
-  const rect = canvas.getBoundingClientRect();
-  if (rect.width <= 0 || rect.height <= 0 || sourceWidth <= 0 || sourceHeight <= 0) {
-    context.clearRect(0, 0, canvas.width, canvas.height);
-    return;
-  }
-
-  const dpr = window.devicePixelRatio || 1;
-  const nextWidth = Math.max(1, Math.floor(rect.width * dpr));
-  const nextHeight = Math.max(1, Math.floor(rect.height * dpr));
-  if (canvas.width !== nextWidth || canvas.height !== nextHeight) {
-    canvas.width = nextWidth;
-    canvas.height = nextHeight;
-  }
-
-  context.setTransform(dpr, 0, 0, dpr, 0, 0);
-  context.clearRect(0, 0, rect.width, rect.height);
-
-  const rawBox = telemetry?.horse_bbox ?? telemetry?.bbox;
-  if (!rawBox || rawBox.length < 4) {
-    return;
-  }
-
-  const [rawX, rawY, rawW, rawH] = rawBox;
-  const scale = Math.min(rect.width / sourceWidth, rect.height / sourceHeight);
-  const drawnWidth = sourceWidth * scale;
-  const drawnHeight = sourceHeight * scale;
-  const offsetX = (rect.width - drawnWidth) / 2;
-  const offsetY = (rect.height - drawnHeight) / 2;
-
-  const x = offsetX + rawX * scale;
-  const y = offsetY + rawY * scale;
-  const w = rawW * scale;
-  const h = rawH * scale;
-  const centerX = x + w / 2;
-
-  const speed = telemetry?.speed_kmh ?? 0;
-  const confidence = Math.round((telemetry?.confidence ?? 0) * 100);
-  const badgeText = `${speed.toFixed(1)} KM/H  •  ${confidence}%`;
-
-  const accent = "#F0903A";
-  const accentSoft = "rgba(240, 144, 58, 0.14)";
-  const border = "rgba(255, 255, 255, 0.85)";
-  const panel = "rgba(10, 12, 18, 0.82)";
-
-  context.font = "600 13px Rajdhani, Inter, sans-serif";
-  const textWidth = context.measureText(badgeText).width;
-  const badgeWidth = Math.max(138, Math.ceil(textWidth + 32));
-  const badgeHeight = 34;
-  const badgeX = Math.max(8, Math.min(rect.width - badgeWidth - 8, centerX - badgeWidth / 2));
-  const badgeY = Math.max(8, y - badgeHeight - 16);
-
-  const drawRoundedRect = (x0: number, y0: number, width: number, height: number, radius: number) => {
-    const x1 = x0 + width;
-    const y1 = y0 + height;
-    const r = Math.min(radius, width / 2, height / 2);
-    context.beginPath();
-    context.moveTo(x0 + r, y0);
-    context.lineTo(x1 - r, y0);
-    context.quadraticCurveTo(x1, y0, x1, y0 + r);
-    context.lineTo(x1, y1 - r);
-    context.quadraticCurveTo(x1, y1, x1 - r, y1);
-    context.lineTo(x0 + r, y1);
-    context.quadraticCurveTo(x0, y1, x0, y1 - r);
-    context.lineTo(x0, y0 + r);
-    context.quadraticCurveTo(x0, y0, x0 + r, y0);
-    context.closePath();
-  };
-
-  context.lineWidth = 2;
-  context.strokeStyle = accent;
-  context.fillStyle = accentSoft;
-  drawRoundedRect(x, y, w, h, 12);
-  context.fill();
-  context.stroke();
-
-  context.fillStyle = panel;
-  context.strokeStyle = "rgba(255, 255, 255, 0.14)";
-  drawRoundedRect(badgeX, badgeY, badgeWidth, badgeHeight, 14);
-  context.fill();
-  context.stroke();
-
-  context.fillStyle = accent;
-  drawRoundedRect(badgeX, badgeY, 5, badgeHeight, 14);
-  context.fill();
-
-  context.strokeStyle = accent;
-  context.lineWidth = 2;
-  context.beginPath();
-  context.moveTo(centerX, badgeY + badgeHeight);
-  context.lineTo(centerX, Math.max(badgeY + badgeHeight + 10, y - 3));
-  context.stroke();
-
-  context.fillStyle = border;
-  context.textBaseline = "middle";
-  context.fillText(badgeText, badgeX + 15, badgeY + badgeHeight / 2 + 0.5);
-}
-
 function formatFileUrl(filePath: string) {
   if (typeof window !== "undefined" && window.electronAPI?.pathToFileUrl) {
     return window.electronAPI.pathToFileUrl(filePath);
@@ -271,10 +162,8 @@ const navItems = [
     to: "/analysis",
     action: "open-analysis-window",
   },
-  { icon: Calendar, label: "Histórico" },
-  { icon: Settings, label: "Configurações" },
-  { icon: Video, label: "Câmeras" },
-  { icon: Crosshair, label: "Calibração" },
+  { icon: Settings, label: "Configurações", to: "/settings" },
+  { icon: Video, label: "Câmeras", to: "/cameras" },
   { icon: FileText, label: "Relatórios", to: "/reports" },
 ];
 
@@ -299,21 +188,17 @@ function Dashboard() {
   const now = useClock();
   const location = useLocation();
   const navigate = useNavigate();
+  const [appSettings] = useState(() => loadAppSettings());
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const playerShellRef = useRef<HTMLDivElement | null>(null);
   const controlsTimerRef = useRef<number | null>(null);
   const frameFlushTimerRef = useRef<number | null>(null);
   const pendingTelemetryRef = useRef<BackendFrameEvent["telemetry"] | null>(null);
-  const lastOverlayTelemetryRef = useRef<BackendFrameEvent["telemetry"] | null>(null);
-  const selectedVideoPathRef = useRef<string | null>(null);
   const [backendHealth, setBackendHealth] = useState<BackendHealth | null>(null);
   const [backendSession, setBackendSession] = useState<BackendSession | null>(null);
   const [backendError, setBackendError] = useState<string | null>(null);
   const [commandStatus, setCommandStatus] = useState<string | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
-  const [frameSrc, setFrameSrc] = useState<string | null>(null);
   const [liveTelemetry, setLiveTelemetry] = useState<BackendFrameEvent["telemetry"] | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [playerDuration, setPlayerDuration] = useState(0);
@@ -361,57 +246,29 @@ function Dashboard() {
         return;
       }
 
-      frameFlushTimerRef.current = window.setTimeout(flushFrame, 80);
+      frameFlushTimerRef.current = window.setTimeout(flushFrame, appSettings.telemetryFlushMs);
     };
 
-    return createBackendSessionSocket((event) => {
+    const stopSocket = createBackendSessionSocket((event) => {
       setBackendError(null);
 
       if (event.type === "frame.update") {
         setBackendSession(event.session);
         pendingTelemetryRef.current = event.telemetry;
-        if (event.frame) {
-          setFrameSrc(`data:${event.frame.mime_type};base64,${event.frame.data}`);
-        }
-        if (hasRenderableBox(event.telemetry)) {
-          lastOverlayTelemetryRef.current = event.telemetry;
-        }
         scheduleFrameFlush();
         return;
       }
 
       setBackendSession(event.session);
-      const sessionTelemetry = (event.session.telemetry ?? null) as BackendFrameEvent["telemetry"] | null;
-      if (hasRenderableBox(sessionTelemetry)) {
-        lastOverlayTelemetryRef.current = sessionTelemetry;
-      }
     });
-  }, []);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || backendSession?.source_type !== "video") {
-      return;
-    }
-
-    video.playbackRate = backendSession.speed || 1;
-    video.muted = isMuted;
-    video.volume = isMuted ? 0 : playerVolume;
-
-    if (backendSession.is_paused) {
-      if (!video.paused) {
-        video.pause();
+    return () => {
+      stopSocket();
+      if (frameFlushTimerRef.current !== null) {
+        window.clearTimeout(frameFlushTimerRef.current);
+        frameFlushTimerRef.current = null;
       }
-    }
-  }, [backendSession?.is_paused, backendSession?.speed, backendSession?.source_type, videoUrl, isMuted, playerVolume]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    video.volume = isMuted ? 0 : playerVolume;
-    video.muted = isMuted;
-  }, [isMuted, playerVolume]);
+    };
+  }, [appSettings.telemetryFlushMs]);
 
   useEffect(() => {
     return () => {
@@ -441,7 +298,6 @@ function Dashboard() {
   const handleOpenVideoPicker = () => {
     void (async () => {
       setCommandError(null);
-      setFrameSrc(null);
       setLiveTelemetry(null);
       pendingTelemetryRef.current = null;
       setIsPlayerControlsVisible(true);
@@ -449,8 +305,10 @@ function Dashboard() {
 
       const selectedPath = await window.electronAPI?.selectVideoFile?.();
       if (selectedPath) {
-        selectedVideoPathRef.current = selectedPath;
-        setVideoUrl(createBackendMediaUrl(selectedPath));
+        if (appSettings.rememberLastSource) {
+          saveLastSourcePath(selectedPath);
+        }
+        setVideoUrl(`${createBackendVideoFeedUrl()}?t=${Date.now()}`);
         setPlayerCurrentTime(0);
         setPlayerDuration(0);
         setIsMuted(false);
@@ -481,11 +339,12 @@ function Dashboard() {
       return;
     }
 
-    setFrameSrc(null);
     setLiveTelemetry(null);
     pendingTelemetryRef.current = null;
-    selectedVideoPathRef.current = filePath;
-    setVideoUrl(createBackendMediaUrl(filePath));
+    setVideoUrl(`${createBackendVideoFeedUrl()}?t=${Date.now()}`);
+    if (appSettings.rememberLastSource) {
+      saveLastSourcePath(filePath);
+    }
     setPlayerCurrentTime(0);
     setPlayerDuration(0);
     setIsMuted(false);
@@ -495,42 +354,32 @@ function Dashboard() {
   };
 
   const handleOpenCamera = async () => {
-    setVideoUrl(null);
-    setFrameSrc(null);
+    if (backendSession?.source_type === "camera") {
+      setVideoUrl(null);
+      setIsPlayerControlsVisible(false);
+      setVideoLoadError(null);
+      pendingTelemetryRef.current = null;
+      await executeCommand("Desligando câmera", () => closeBackendSource());
+      return;
+    }
+
+    const preferredCameraIndex = appSettings.preferredCameraIndex ?? 0;
+    setVideoUrl(`${createBackendVideoFeedUrl()}?t=${Date.now()}`);
     setIsPlayerControlsVisible(false);
     setVideoLoadError(null);
     pendingTelemetryRef.current = null;
-    selectedVideoPathRef.current = null;
-    await executeCommand("Abrindo câmera", () => openBackendCamera(0));
+    await executeCommand("Abrindo câmera", () => openBackendCamera(preferredCameraIndex));
   };
 
   const handlePauseToggle = async () => {
     const nextPaused = !(backendSession?.is_paused ?? false);
-    if (backendSession?.source_type === "video") {
-      const video = videoRef.current;
-      if (!video) return;
-
-      if (nextPaused) {
-        video.pause();
-      } else {
-        try {
-          await video.play();
-        } catch {
-          setCommandError("O navegador bloqueou a reprodução automática. Pressione play no player.");
-        }
-      }
-    }
     void executeCommand("Alternando pausa", () => toggleBackendPause(nextPaused));
   };
 
   const handleSeek = async (direction: number) => {
-    const video = videoRef.current;
-    const sourceSeconds = video?.currentTime ?? capture?.position_seconds ?? 0;
+    const sourceSeconds = capture?.position_seconds ?? 0;
     const targetSeconds = Math.max(0, sourceSeconds + direction * 5);
-    if (video) {
-      video.currentTime = targetSeconds;
-      setPlayerCurrentTime(targetSeconds);
-    }
+    setPlayerCurrentTime(targetSeconds);
     await executeCommand("Buscando", () => seekBackendSession(targetSeconds - sourceSeconds));
   };
 
@@ -540,13 +389,23 @@ function Dashboard() {
     const currentIndex = steps.findIndex((step) => Math.abs(step - currentSpeed) < 0.05);
     const nextSpeed = steps[(currentIndex + 1) % steps.length];
     await executeCommand("Ajustando velocidade", () => setBackendSpeed(nextSpeed));
-    if (videoRef.current) {
-      videoRef.current.playbackRate = nextSpeed;
-    }
   };
 
   const handleCalibrate = async () => {
     await executeCommand("Calibrando", () => calibrateBackendSession());
+  };
+
+  const handleCaptureScreenshot = async () => {
+    setCommandStatus("Capturando imagem");
+    setCommandError(null);
+    try {
+      await downloadBackendSnapshot();
+      setCommandStatus("Screenshot salva");
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : "Falha ao capturar a imagem");
+    } finally {
+      window.setTimeout(() => setCommandStatus(null), 1800);
+    }
   };
 
   const handleMarker = async (label: string, color?: string) => {
@@ -554,8 +413,7 @@ function Dashboard() {
   };
 
   const handleReset = async () => {
-    setVideoUrl(null);
-    setFrameSrc(null);
+    setVideoUrl(`${createBackendVideoFeedUrl()}?t=${Date.now()}`);
     setPlayerCurrentTime(0);
     setPlayerDuration(0);
     setIsMuted(false);
@@ -567,6 +425,10 @@ function Dashboard() {
 
   const showPlayerControls = () => {
     setIsPlayerControlsVisible(true);
+    if (!appSettings.autoHideControls) {
+      return;
+    }
+
     if (controlsTimerRef.current) {
       window.clearTimeout(controlsTimerRef.current);
     }
@@ -586,6 +448,10 @@ function Dashboard() {
   };
 
   const handlePlayerMouseLeave = () => {
+    if (!appSettings.autoHideControls) {
+      return;
+    }
+
     if (controlsTimerRef.current) {
       window.clearTimeout(controlsTimerRef.current);
     }
@@ -596,93 +462,28 @@ function Dashboard() {
     }, 250);
   };
 
-  const handleVideoLoadedMetadata = () => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    setPlayerDuration(Number.isFinite(video.duration) ? video.duration : 0);
-    setPlayerCurrentTime(video.currentTime || 0);
-    setPlayerVolume(video.volume || 0.85);
-    setIsMuted(video.muted);
-    setIsPlayerControlsVisible(true);
-    setVideoLoadError(null);
-    if (backendSession?.source_type === "video" && !backendSession.is_paused) {
-      void video.play().catch(() => {
-        setVideoLoadError("O navegador bloqueou a reprodução automática. Use o botão play.");
-      });
-    }
-  };
-
-  const handleVideoError = () => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    const errorCode = video.error?.code;
-    const errorMessage =
-      errorCode === 4
-        ? "O formato do vídeo não é suportado pelo player do Electron."
-        : errorCode === 3
-          ? "Não foi possível decodificar o vídeo selecionado."
-          : "Falha ao carregar o vídeo.";
-    setVideoLoadError(errorMessage);
-  };
-
-  const handleVideoTimeUpdate = () => {
-    const video = videoRef.current;
-    if (!video || isSeeking) return;
-    setPlayerCurrentTime(video.currentTime || 0);
-    setPlayerDuration(Number.isFinite(video.duration) ? video.duration : 0);
-  };
-
-  const handleVideoVolumeUpdate = () => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    setPlayerVolume(video.volume);
-    setIsMuted(video.muted);
-  };
-
   const handlePlayerSeekStart = () => {
     setIsSeeking(true);
   };
 
   const handlePlayerSeekChange = (value: number) => {
-    const video = videoRef.current;
-    if (!video) return;
-
     setPlayerCurrentTime(value);
-    video.currentTime = value;
   };
 
   const handlePlayerSeekEnd = async () => {
     setIsSeeking(false);
-    const video = videoRef.current;
-    if (!video) return;
-
     const targetSeconds = playerCurrentTime;
     const sourceSeconds = capture?.position_seconds ?? targetSeconds;
     await executeCommand("Buscando", () => seekBackendSession(targetSeconds - sourceSeconds));
   };
 
   const handleToggleMute = () => {
-    const video = videoRef.current;
-    if (!video) return;
-
     const nextMuted = !isMuted;
-    video.muted = nextMuted;
     setIsMuted(nextMuted);
-    if (!nextMuted && video.volume === 0) {
-      video.volume = playerVolume || 0.85;
-    }
   };
 
   const handlePlayerVolumeChange = (value: number) => {
-    const video = videoRef.current;
-    if (!video) return;
-
     const nextVolume = Math.max(0, Math.min(1, value));
-    video.volume = nextVolume;
-    video.muted = nextVolume === 0;
     setPlayerVolume(nextVolume);
     setIsMuted(nextVolume === 0);
   };
@@ -715,6 +516,8 @@ function Dashboard() {
   const currentTelemetry = liveTelemetry ?? sessionTelemetry;
   const currentSpeed = currentTelemetry?.speed_kmh ?? 0;
   const isVideoSource = backendSession?.source_type === "video" && Boolean(videoUrl);
+  const isCameraSource = backendSession?.source_type === "camera" && Boolean(videoUrl);
+  const hasMediaSource = Boolean(videoUrl) && backendSession?.source_type !== "idle";
   const playbackState = backendSession
     ? backendSession.is_running
       ? backendSession.is_paused
@@ -736,64 +539,38 @@ function Dashboard() {
   }));
 
   useEffect(() => {
-    if (hasRenderableBox(liveTelemetry)) {
-      lastOverlayTelemetryRef.current = liveTelemetry;
-    }
-  }, [liveTelemetry]);
-
-  useEffect(() => {
-    if (hasRenderableBox(sessionTelemetry)) {
-      lastOverlayTelemetryRef.current = sessionTelemetry;
-    }
-  }, [sessionTelemetry]);
-
-  useEffect(() => {
-    const canvas = overlayCanvasRef.current;
-    const shell = playerShellRef.current;
-    if (!canvas || !shell || !isVideoSource) {
+    if (isSeeking) {
       return;
     }
 
-    const redraw = () => {
-      const sourceWidth = backendSession?.capture?.width ?? videoRef.current?.videoWidth ?? 0;
-      const sourceHeight = backendSession?.capture?.height ?? videoRef.current?.videoHeight ?? 0;
-      drawTrackingOverlay(
-        canvas,
-        sourceWidth,
-        sourceHeight,
-        liveTelemetry ?? sessionTelemetry ?? lastOverlayTelemetryRef.current,
-      );
-    };
-
-    redraw();
-
-    const ResizeObserverCtor = window.ResizeObserver;
-    let observer: ResizeObserver | null = null;
-    if (ResizeObserverCtor) {
-      observer = new ResizeObserverCtor(() => redraw());
-      observer.observe(shell);
+    if (capture?.position_seconds != null) {
+      setPlayerCurrentTime(capture.position_seconds);
     }
 
-    const video = videoRef.current;
-    const handleLoadedMetadata = () => redraw();
-    video?.addEventListener("loadedmetadata", handleLoadedMetadata);
+    if (capture?.duration_seconds != null) {
+      setPlayerDuration(capture.duration_seconds);
+    }
+  }, [capture?.duration_seconds, capture?.position_seconds, isSeeking]);
 
-    return () => {
-      observer?.disconnect();
-      video?.removeEventListener("loadedmetadata", handleLoadedMetadata);
-    };
-  }, [
-    backendSession?.capture?.height,
-    backendSession?.capture?.width,
-    isVideoSource,
-    liveTelemetry,
-    sessionTelemetry,
-    videoUrl,
-  ]);
+  useEffect(() => {
+    if (!backendSession || !appSettings.restoreFeedOnReturn) {
+      return;
+    }
+
+    const shouldRestoreFeed = backendSession.is_running && backendSession.source_type !== "idle";
+    if (shouldRestoreFeed && !videoUrl) {
+      setVideoUrl(`${createBackendVideoFeedUrl()}?t=${Date.now()}`);
+      return;
+    }
+
+    if (!shouldRestoreFeed && videoUrl) {
+      setVideoUrl(null);
+    }
+  }, [appSettings.restoreFeedOnReturn, backendSession?.is_running, backendSession?.source_type, videoUrl]);
 
   const handleSidebarAction = async (to?: string, action?: string) => {
     if (action === "open-analysis-window") {
-      if (window.electronAPI?.openAnalysisWindow) {
+      if (appSettings.openAnalysisInWindow && window.electronAPI?.openAnalysisWindow) {
         await window.electronAPI.openAnalysisWindow();
         return;
       }
@@ -802,7 +579,7 @@ function Dashboard() {
     }
 
     if (to) {
-      void navigate({ to: to as "/" | "/analysis" | "/reports" });
+      void navigate({ to: to as "/" | "/analysis" | "/reports" | "/settings" | "/cameras" });
     }
   };
 
@@ -879,7 +656,11 @@ function Dashboard() {
             <InfoPill icon={<Calendar className="h-4 w-4" />} label="Data atual" value={dateStr} />
             <InfoPill icon={<Clock className="h-4 w-4" />} label="Hora local" value={timeStr} />
             <InfoPill icon={<Radio className="h-4 w-4" />} label="Backend" value={backendLabel} />
-            <button className="rounded-lg border border-border bg-surface p-2.5 text-muted-foreground transition hover:text-foreground">
+            <button
+              onClick={() => void navigate({ to: "/settings" })}
+              className="rounded-lg border border-border bg-surface p-2.5 text-muted-foreground transition hover:text-foreground"
+              aria-label="Abrir configurações"
+            >
               <Settings className="h-4 w-4" />
             </button>
           </div>
@@ -932,62 +713,43 @@ function Dashboard() {
                 onMouseMove={handlePlayerMouseMove}
                 onMouseLeave={handlePlayerMouseLeave}
               >
-                {isVideoSource && videoUrl ? (
+                {hasMediaSource && videoUrl ? (
                   <div className="relative h-full min-h-[560px] w-full xl:min-h-[680px]">
-                    <video
-                      ref={videoRef}
+                    <img
                       src={videoUrl}
-                      key={videoUrl}
-                      className="absolute left-0 top-0 h-px w-px opacity-0 pointer-events-none"
-                      playsInline
-                      preload="auto"
-                      onLoadedMetadata={handleVideoLoadedMetadata}
-                      onError={handleVideoError}
-                      onTimeUpdate={handleVideoTimeUpdate}
-                      onVolumeChange={handleVideoVolumeUpdate}
-                      onPlay={showPlayerControls}
-                      onPause={() => setIsPlayerControlsVisible(true)}
+                      alt="Stream processado pelo backend"
+                      className="absolute inset-0 h-full w-full object-contain bg-black"
+                      onLoad={() => setVideoLoadError(null)}
+                      onError={() => setVideoLoadError("Falha ao carregar o stream do backend.")}
                     />
-                    {frameSrc ? (
-                      <img
-                        src={frameSrc}
-                        alt="Quadro processado pelo backend"
-                        className="absolute inset-0 h-full w-full object-contain bg-black"
-                      />
-                    ) : (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black">
-                        <div className="text-center">
-                          <div className="mx-auto h-14 w-14 rounded-full border-2 border-brand/60 border-t-transparent animate-spin" />
-                          <p className="mt-4 text-sm text-muted-foreground">
-                            {videoLoadError || "Aguardando o primeiro frame processado..."}
-                          </p>
-                        </div>
+                    {videoLoadError ? (
+                      <div className="absolute left-1/2 top-20 w-[min(92%,560px)] -translate-x-1/2 rounded-2xl border border-destructive/30 bg-black/75 px-4 py-3 text-center text-sm text-destructive backdrop-blur-xl">
+                        {videoLoadError}
                       </div>
-                    )}
+                    ) : null}
                     <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/70" />
 
                     <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full border border-white/10 bg-black/55 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/90 backdrop-blur-xl">
                       <span className="h-2 w-2 rounded-full bg-success shadow-[0_0_12px_rgba(34,197,94,0.85)]" />
-                      Ao vivo
+                      {isCameraSource ? "Câmera ao vivo" : "Ao vivo"}
                     </div>
 
                     <div className="absolute right-4 top-4 rounded-full border border-white/10 bg-black/55 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/80 backdrop-blur-xl">
-                      {backendSession?.is_paused ? "Pausado" : "Reproduzindo"}
+                      {backendSession?.source_type === "camera"
+                        ? "Câmera ativa"
+                        : backendSession?.is_paused
+                          ? "Pausado"
+                          : "Reproduzindo"}
                     </div>
 
-                    {videoLoadError && (
-                      <div className="absolute left-1/2 top-20 w-[min(92%,560px)] -translate-x-1/2 rounded-2xl border border-destructive/30 bg-black/75 px-4 py-3 text-center text-sm text-destructive backdrop-blur-xl">
-                        {videoLoadError}
-                      </div>
-                    )}
-
-                    <div
-                      className={[
-                        "absolute inset-x-0 bottom-0 p-4 transition-opacity duration-200",
-                        backendSession?.is_paused || isPlayerControlsVisible ? "opacity-100" : "opacity-0",
-                      ].join(" ")}
-                    >
-                      <div className="rounded-2xl border border-white/10 bg-black/60 backdrop-blur-xl">
+                    {isVideoSource ? (
+                      <div
+                        className={[
+                          "absolute inset-x-0 bottom-0 p-4 transition-opacity duration-200",
+                          backendSession?.is_paused || isPlayerControlsVisible ? "opacity-100" : "opacity-0",
+                        ].join(" ")}
+                      >
+                        <div className="rounded-2xl border border-white/10 bg-black/60 backdrop-blur-xl">
                         <div className="flex items-center gap-3 border-b border-white/10 px-4 py-3">
                           <button
                             onClick={handleOpenVideoPicker}
@@ -1087,25 +849,8 @@ function Dashboard() {
                           </div>
                         </div>
                       </div>
-                    </div>
-                  </div>
-                ) : frameSrc ? (
-                  <div className="relative h-full min-h-[560px] w-full xl:min-h-[680px]">
-                    <img
-                      src={frameSrc}
-                      alt="Quadro processado pelo backend"
-                      className="absolute inset-0 h-full w-full object-contain bg-black"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/70" />
-
-                    <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full border border-white/10 bg-black/55 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/90 backdrop-blur-xl">
-                      <span className="h-2 w-2 rounded-full bg-success shadow-[0_0_12px_rgba(34,197,94,0.85)]" />
-                      Ao vivo
-                    </div>
-
-                    <div className="absolute right-4 top-4 rounded-full border border-white/10 bg-black/55 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/80 backdrop-blur-xl">
-                      {backendSession?.is_paused ? "Pausado" : "Reproduzindo"}
-                    </div>
+                      </div>
+                    ) : null}
                   </div>
                 ) : (
                   <div className="flex h-full min-h-[560px] flex-col items-center justify-center px-8 text-center xl:min-h-[680px]">
@@ -1140,10 +885,10 @@ function Dashboard() {
               onOpenVideo={handleOpenVideoPicker}
               onOpenCamera={handleOpenCamera}
               onCalibrate={handleCalibrate}
-              onTogglePause={handlePauseToggle}
+              onTakeScreenshot={handleCaptureScreenshot}
               onAddStartMarker={() => handleMarker("Início", "#22c55e")}
               onAddEndMarker={() => handleMarker("Fim", "#0ea5e9")}
-              isPaused={backendSession?.is_paused ?? false}
+              isCameraActive={backendSession?.source_type === "camera"}
             />
             <RecentHistory markers={markers} />
           </div>
@@ -1333,29 +1078,29 @@ function ToolsCard({
   onOpenVideo,
   onOpenCamera,
   onCalibrate,
-  onTogglePause,
+  onTakeScreenshot,
   onAddStartMarker,
   onAddEndMarker,
-  isPaused,
+  isCameraActive,
 }: {
   onOpenVideo: () => void;
   onOpenCamera: () => void;
   onCalibrate: () => void;
-  onTogglePause: () => void;
+  onTakeScreenshot: () => void;
   onAddStartMarker: () => void;
   onAddEndMarker: () => void;
-  isPaused: boolean;
+  isCameraActive: boolean;
 }) {
   const tools = [
     { icon: Upload, label: "Carregar", tint: "brand", action: onOpenVideo },
-    { icon: Camera, label: "Câmera", tint: "info", action: onOpenCamera },
-    { icon: Target, label: "Calibrar", tint: "success", action: onCalibrate },
     {
-      icon: isPaused ? Play : Pause,
-      label: isPaused ? "Retomar" : "Pausar",
-      tint: "warning",
-      action: onTogglePause,
+      icon: Camera,
+      label: isCameraActive ? "Desligar" : "Câmera",
+      tint: "info",
+      action: onOpenCamera,
     },
+    { icon: Target, label: "Calibrar", tint: "success", action: onCalibrate },
+    { icon: Camera, label: "Capturar", tint: "warning", action: onTakeScreenshot },
     { icon: Flag, label: "Início", tint: "success", action: onAddStartMarker },
     { icon: Flag, label: "Fim", tint: "brand", action: onAddEndMarker },
   ];

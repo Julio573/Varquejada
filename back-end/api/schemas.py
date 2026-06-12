@@ -13,6 +13,10 @@ class OpenCameraRequest(BaseModel):
     device_index: int = Field(0, ge=0, description="Índice da câmera.")
 
 
+class CloseSourceRequest(BaseModel):
+    pass
+
+
 class PauseRequest(BaseModel):
     paused: bool | None = Field(
         default=None,
@@ -89,6 +93,7 @@ class SessionSnapshot(BaseModel):
     calibration: dict[str, object] | None = None
     telemetry: SessionTelemetry = Field(default_factory=SessionTelemetry)
     telemetry_history_count: int = 0
+    report_segment_count: int = 0
     last_report_path: str | None = None
     last_error: str | None = None
     capture: CaptureInfo | None = None

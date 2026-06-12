@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from base64 import b64encode
 from datetime import datetime, timezone
 import threading
 import time
@@ -9,7 +8,7 @@ from typing import Any
 
 import cv2
 
-from api.schemas import FramePayload, FrameUpdateEvent, SessionSnapshot, SessionTelemetry
+from api.schemas import FrameUpdateEvent, SessionSnapshot, SessionTelemetry
 from core.session_events import SessionEventHub
 from core.session_manager import SessionManager
 from processing.horse_tracker import HorseTracker
@@ -37,6 +36,9 @@ class SessionFrameStreamer:
         self._last_session_id: int | None = None
         self._last_calibration_signature: str | None = None
         self._frame_index = 0
+        self._latest_frame_lock = threading.Lock()
+        self._latest_frame_bytes: bytes | None = None
+        self._latest_frame_version = 0
         self._last_telemetry: dict[str, Any] = {
             "speed_kmh": 0.0,
             "distance_m": 0.0,
@@ -128,22 +130,17 @@ class SessionFrameStreamer:
                 frame_to_send = self._tracker.draw_tracking(frame, None, None)
 
             frame_to_send = self._resize_frame(frame_to_send)
-            encoded_frame = self._encode_frame(frame_to_send)
+            encoded_frame = self._encode_frame_bytes(frame_to_send)
             if encoded_frame is None:
                 self._sleep(0.02)
                 continue
 
-            frame_payload = FramePayload(
-                mime_type="image/jpeg",
-                width=int(frame_to_send.shape[1]),
-                height=int(frame_to_send.shape[0]),
-                data=encoded_frame,
-            )
+            self._store_latest_frame(encoded_frame)
 
             payload = FrameUpdateEvent(
                 timestamp=datetime.now(timezone.utc).isoformat(),
                 session=SessionSnapshot.model_validate(session_snapshot),
-                frame=frame_payload,
+                frame=None,
                 telemetry=SessionTelemetry.model_validate(telemetry),
             )
             self._broadcast(payload.model_dump(mode="json"))
@@ -199,11 +196,20 @@ class SessionFrameStreamer:
         }
         return processed_frame, telemetry
 
-    def _encode_frame(self, frame: Any) -> str | None:
+    def _encode_frame_bytes(self, frame: Any) -> bytes | None:
         ok, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 72])
         if not ok:
             return None
-        return b64encode(buffer.tobytes()).decode("ascii")
+        return buffer.tobytes()
+
+    def _store_latest_frame(self, frame_bytes: bytes) -> None:
+        with self._latest_frame_lock:
+            self._latest_frame_bytes = frame_bytes
+            self._latest_frame_version += 1
+
+    def get_latest_frame(self) -> tuple[bytes | None, int]:
+        with self._latest_frame_lock:
+            return self._latest_frame_bytes, self._latest_frame_version
 
     def _resize_frame(self, frame: Any, max_width: int = 720) -> Any:
         height, width = frame.shape[:2]

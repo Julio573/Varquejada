@@ -31,6 +31,7 @@ class SessionManager:
     calibration: dict[str, Any] | None = None
     telemetry: dict[str, Any] = field(default_factory=dict)
     telemetry_history: list[dict[str, Any]] = field(default_factory=list)
+    _report_segments: list[dict[str, Any]] = field(default_factory=list, init=False, repr=False)
     last_report_path: str | None = None
     last_error: str | None = None
 
@@ -61,6 +62,7 @@ class SessionManager:
                 "calibration": dict(self.calibration) if self.calibration else None,
                 "telemetry": dict(self.telemetry),
                 "telemetry_history_count": len(self.telemetry_history),
+                "report_segment_count": len(self._report_segments),
                 "last_report_path": self.last_report_path,
                 "last_error": self.last_error,
                 "capture": capture_info,
@@ -75,6 +77,20 @@ class SessionManager:
 
     def open_camera(self, device_index: int = 0) -> dict[str, Any]:
         return self._open_capture("camera", int(device_index))
+
+    def close_source(self) -> dict[str, Any]:
+        with self._lock:
+            self._archive_current_measurement_locked("source-stop")
+            self._release_capture_locked()
+            self.source_type = "idle"
+            self.source_value = None
+            self.is_running = False
+            self.is_paused = False
+            self.speed = 1.0
+            self.telemetry.clear()
+            self.telemetry_history.clear()
+            self.last_error = None
+            return self.snapshot()
 
     def pause(self, paused: bool | None = None) -> dict[str, Any]:
         with self._lock:
@@ -167,13 +183,45 @@ class SessionManager:
 
     def reset(self) -> None:
         with self._lock:
-            self._finalize_current_session_locked("reset")
+            self._archive_current_measurement_locked("reset")
+            self.session_id += 1
+            self.session_started_at = datetime.now(timezone.utc).isoformat()
+            self.session_finished_at = None
+            self.is_running = self._capture is not None and self._capture.isOpened()
+            self.is_paused = False
+            self.speed = 1.0
+            self.ppm = None
+            self.verdict = "TELEMETRIA"
+            self.markers.clear()
+            self.calibration = None
+            self.telemetry.clear()
+            self.telemetry_history.clear()
+            self.last_error = None
+
+    def finish_measurement(self) -> str | None:
+        with self._lock:
+            self._archive_current_measurement_locked("finish")
+            if not self._report_segments:
+                self.session_finished_at = datetime.now(timezone.utc).isoformat()
+                self.last_error = "Nenhuma medição disponível para encerrar."
+                return None
+
+            finished_at = datetime.now(timezone.utc).isoformat()
+            self.session_finished_at = finished_at
+            payload = self._build_final_report_payload_locked("finish", finished_at)
+
+            try:
+                report_path = build_session_report(payload, self._reports_dir)
+            except Exception as exc:
+                self.last_error = f"Falha ao gerar relatório: {exc}"
+                return None
+
+            self.last_report_path = str(report_path)
+            self._report_segments.clear()
             self._release_capture_locked()
             self.source_type = "idle"
             self.source_value = None
-            self.session_id += 1
             self.session_started_at = None
-            self.session_finished_at = datetime.now(timezone.utc).isoformat()
             self.is_running = False
             self.is_paused = False
             self.speed = 1.0
@@ -184,6 +232,7 @@ class SessionManager:
             self.telemetry.clear()
             self.telemetry_history.clear()
             self.last_error = None
+            return self.last_report_path
 
     def read_frame(self) -> tuple[bool, Any | None, dict[str, Any]]:
         with self._lock:
@@ -238,7 +287,7 @@ class SessionManager:
 
     def _open_capture(self, source_type: str, source_value: str | int) -> dict[str, Any]:
         with self._lock:
-            self._finalize_current_session_locked("source-change")
+            self._archive_current_measurement_locked("source-change")
             self._release_capture_locked()
 
             if source_type == "video":
@@ -343,8 +392,23 @@ class SessionManager:
         return None
 
     def _build_report_payload_locked(self, reason: str) -> dict[str, Any]:
-        capture_info = self._capture_info_locked()
-        telemetry_history = [dict(sample) for sample in self.telemetry_history]
+        return self._build_report_payload_from_history_locked(
+            reason=reason,
+            telemetry_history=[dict(sample) for sample in self.telemetry_history],
+            markers=[dict(marker) for marker in self.markers],
+            session_snapshot=self.snapshot(),
+            capture_info=self._capture_info_locked(),
+        )
+
+    def _build_report_payload_from_history_locked(
+        self,
+        *,
+        reason: str,
+        telemetry_history: list[dict[str, Any]],
+        markers: list[dict[str, Any]],
+        session_snapshot: dict[str, Any],
+        capture_info: dict[str, Any] | None,
+    ) -> dict[str, Any]:
         speeds = [float(sample.get("speed_kmh", 0.0) or 0.0) for sample in telemetry_history]
         positions = [float(sample.get("position_seconds", 0.0) or 0.0) for sample in telemetry_history]
         distances = [float(sample.get("distance_m", 0.0) or 0.0) for sample in telemetry_history]
@@ -389,9 +453,9 @@ class SessionManager:
         return {
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "reason": reason,
-            "session": self.snapshot(),
+            "session": session_snapshot,
             "capture": capture_info,
-            "markers": [dict(marker) for marker in self.markers],
+            "markers": markers,
             "samples": telemetry_history,
             "metrics": {
                 "sample_count": len(telemetry_history),
@@ -408,23 +472,66 @@ class SessionManager:
             },
         }
 
-    def _finalize_current_session_locked(self, reason: str) -> str | None:
-        if self.source_type == "idle" and not self.telemetry_history and not self.markers:
-            self.session_finished_at = datetime.now(timezone.utc).isoformat()
+    def _archive_current_measurement_locked(self, reason: str) -> dict[str, Any] | None:
+        if not self.telemetry_history and not self.markers:
             return None
 
         payload = self._build_report_payload_locked(reason)
         if not payload["metrics"]["sample_count"] and not payload["markers"]:
-            self.session_finished_at = payload["generated_at"]
             return None
 
-        try:
-            report_path = build_session_report(payload, self._reports_dir)
-        except Exception as exc:
-            self.last_error = f"Falha ao gerar relatório: {exc}"
-            self.session_finished_at = payload["generated_at"]
-            return None
+        payload["segment_index"] = len(self._report_segments) + 1
+        self._report_segments.append(payload)
+        return payload
 
-        self.last_report_path = str(report_path)
-        self.session_finished_at = payload["generated_at"]
-        return self.last_report_path
+    def _build_final_report_payload_locked(self, reason: str, finished_at: str) -> dict[str, Any]:
+        segments = [dict(segment) for segment in self._report_segments]
+        if self.telemetry_history or self.markers:
+            current_segment = self._build_report_payload_from_history_locked(
+                reason="segment",
+                telemetry_history=[dict(sample) for sample in self.telemetry_history],
+                markers=[dict(marker) for marker in self.markers],
+                session_snapshot=self.snapshot(),
+                capture_info=self._capture_info_locked(),
+            )
+            if current_segment["metrics"]["sample_count"] or current_segment["markers"]:
+                current_segment["segment_index"] = len(segments) + 1
+                segments.append(current_segment)
+
+        combined_samples: list[dict[str, Any]] = []
+        combined_markers: list[dict[str, Any]] = []
+        for segment in segments:
+            combined_samples.extend([dict(sample) for sample in segment.get("samples", [])])
+            combined_markers.extend([dict(marker) for marker in segment.get("markers", [])])
+
+        if not combined_samples and not combined_markers:
+            return {
+                "generated_at": finished_at,
+                "reason": reason,
+                "session": self.snapshot(),
+                "capture": self._capture_info_locked(),
+                "markers": [],
+                "samples": [],
+                "segments": segments,
+                "metrics": {
+                    "sample_count": 0,
+                    "max_speed_kmh": 0.0,
+                    "min_speed_kmh": 0.0,
+                    "avg_speed_kmh": 0.0,
+                    "trend_kmh": 0.0,
+                    "peak_acceleration_kmh_s": 0.0,
+                    "time_above_40_s": 0.0,
+                    "consistency_pct": 0.0,
+                    "distance_m": 0.0,
+                    "avg_confidence": 0.0,
+                    "duration_seconds": None,
+                },
+            }
+
+        return self._build_report_payload_from_history_locked(
+            reason=reason,
+            telemetry_history=combined_samples,
+            markers=combined_markers,
+            session_snapshot=self.snapshot(),
+            capture_info=self._capture_info_locked(),
+        ) | {"segments": segments, "generated_at": finished_at}

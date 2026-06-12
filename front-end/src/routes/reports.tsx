@@ -15,6 +15,7 @@ import {
   API_BASE_URL,
   createBackendMediaUrl,
   createBackendReportUrl,
+  finishBackendSession,
   downloadLatestBackendReport,
   fetchBackendHealth,
   fetchBackendReports,
@@ -154,6 +155,19 @@ function ReportsPage() {
       setDownloadStatus("Relatório baixado com sucesso.");
     } catch (error) {
       setDownloadError(error instanceof Error ? error.message : "Falha ao baixar o relatório");
+    } finally {
+      window.setTimeout(() => setDownloadStatus(null), 2200);
+    }
+  };
+
+  const handleFinishMeasurement = async () => {
+    setDownloadError(null);
+    setDownloadStatus("Encerrando medição e gerando PDF...");
+    try {
+      await finishBackendSession();
+      setDownloadStatus("Medição encerrada com sucesso.");
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : "Falha ao encerrar a medição");
     } finally {
       window.setTimeout(() => setDownloadStatus(null), 2200);
     }
@@ -319,6 +333,18 @@ function ReportsPage() {
                       </div>
                       <FolderDown className="h-4 w-4 text-brand" />
                     </button>
+                    <button
+                      onClick={() => void handleFinishMeasurement()}
+                      className="flex w-full items-center justify-between rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-left transition hover:border-success/50 hover:bg-success/15"
+                    >
+                      <div>
+                        <div className="font-semibold">Encerrar medição</div>
+                        <div className="text-xs text-muted-foreground">
+                          Fecha o arquivo atual e gera o PDF final.
+                        </div>
+                      </div>
+                      <TimerReset className="h-4 w-4 text-success" />
+                    </button>
                     <a
                       href={hasReport ? reportUrl : undefined}
                       target={hasReport ? "_blank" : undefined}
@@ -373,7 +399,7 @@ function ReportsPage() {
                 />
                 <InfoBlock
                   title="Novo ciclo"
-                  text="Ao trocar de vídeo ou resetar a corrida, a medição atual é fechada e um novo relatório passa a valer para a próxima análise."
+                  text="Ao resetar a corrida, a medição atual entra no mesmo relatório em andamento. O PDF final só é gerado ao encerrar a medição."
                 />
                 <InfoBlock
                   title="Arquivo atual"

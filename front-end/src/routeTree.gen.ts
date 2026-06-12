@@ -9,13 +9,25 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ReportsRouteImport } from './routes/reports'
+import { Route as CamerasRouteImport } from './routes/cameras'
 import { Route as AnalysisRouteImport } from './routes/analysis'
 import { Route as IndexRouteImport } from './routes/index'
 
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ReportsRoute = ReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CamerasRoute = CamerasRouteImport.update({
+  id: '/cameras',
+  path: '/cameras',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AnalysisRoute = AnalysisRouteImport.update({
@@ -32,40 +44,62 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/analysis': typeof AnalysisRoute
+  '/cameras': typeof CamerasRoute
   '/reports': typeof ReportsRoute
+  '/settings': typeof SettingsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/analysis': typeof AnalysisRoute
+  '/cameras': typeof CamerasRoute
   '/reports': typeof ReportsRoute
+  '/settings': typeof SettingsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/analysis': typeof AnalysisRoute
+  '/cameras': typeof CamerasRoute
   '/reports': typeof ReportsRoute
+  '/settings': typeof SettingsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/analysis' | '/reports'
+  fullPaths: '/' | '/analysis' | '/cameras' | '/reports' | '/settings'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/analysis' | '/reports'
-  id: '__root__' | '/' | '/analysis' | '/reports'
+  to: '/' | '/analysis' | '/cameras' | '/reports' | '/settings'
+  id: '__root__' | '/' | '/analysis' | '/cameras' | '/reports' | '/settings'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AnalysisRoute: typeof AnalysisRoute
+  CamerasRoute: typeof CamerasRoute
   ReportsRoute: typeof ReportsRoute
+  SettingsRoute: typeof SettingsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reports': {
       id: '/reports'
       path: '/reports'
       fullPath: '/reports'
       preLoaderRoute: typeof ReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cameras': {
+      id: '/cameras'
+      path: '/cameras'
+      fullPath: '/cameras'
+      preLoaderRoute: typeof CamerasRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/analysis': {
@@ -88,7 +122,9 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AnalysisRoute: AnalysisRoute,
+  CamerasRoute: CamerasRoute,
   ReportsRoute: ReportsRoute,
+  SettingsRoute: SettingsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

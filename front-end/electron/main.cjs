@@ -1,6 +1,6 @@
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
-const { app, BrowserWindow, dialog, ipcMain, screen, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, screen, session, shell } = require("electron");
 
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 app.on("browser-window-created", (_, window) => {
@@ -9,6 +9,7 @@ app.on("browser-window-created", (_, window) => {
 });
 
 let analysisWindow = null;
+let mainWindow = null;
 
 function getAppUrl(route = "/") {
   const isDev = !app.isPackaged;
@@ -119,8 +120,24 @@ ipcMain.handle("open-analysis-window", async () => {
   return true;
 });
 
+ipcMain.handle("close-analysis-window", async () => {
+  if (analysisWindow && !analysisWindow.isDestroyed()) {
+    analysisWindow.close();
+    analysisWindow = null;
+  }
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
+    mainWindow.focus();
+  }
+
+  return true;
+});
+
 function createWindow() {
-  const win = createAppWindow({
+  mainWindow = createAppWindow({
     title: "VeloVaquejo Pro",
     route: "/",
     display: screen.getPrimaryDisplay(),
@@ -128,13 +145,27 @@ function createWindow() {
 
   const isDev = !app.isPackaged;
   if (isDev && process.env.ELECTRON_OPEN_DEVTOOLS === "1") {
-    win.webContents.openDevTools({ mode: "detach" });
+    mainWindow.webContents.openDevTools({ mode: "detach" });
   }
 
-  return win;
+  return mainWindow;
 }
 
 app.whenReady().then(() => {
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    const url = webContents.getURL();
+    const isTrustedOrigin =
+      url.startsWith("http://127.0.0.1:5173") ||
+      url.startsWith("http://localhost:5173") ||
+      url.startsWith("file://");
+    if (isTrustedOrigin && permission === "media") {
+      callback(true);
+      return;
+    }
+
+    callback(false);
+  });
+
   createWindow();
 
   app.on("activate", () => {

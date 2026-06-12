@@ -20,6 +20,7 @@ export type BackendSession = {
   calibration: Record<string, unknown> | null;
   telemetry?: Record<string, unknown>;
   telemetry_history_count?: number;
+  report_segment_count?: number;
   last_report_path?: string | null;
   last_error: string | null;
   capture: BackendCapture | null;
@@ -93,6 +94,14 @@ export function createBackendMediaUrl(path: string) {
   return url.toString();
 }
 
+export function createBackendVideoFeedUrl() {
+  return new URL("/media/video-feed", API_BASE_URL).toString();
+}
+
+export function createBackendSnapshotUrl() {
+  return new URL("/media/snapshot", API_BASE_URL).toString();
+}
+
 export function createBackendReportUrl() {
   return new URL("/reports/latest", API_BASE_URL).toString();
 }
@@ -155,6 +164,10 @@ export function openBackendCamera(deviceIndex = 0) {
   return postJson<BackendSession>("/session/open-camera", { device_index: deviceIndex });
 }
 
+export function closeBackendSource() {
+  return postJson<BackendSession>("/session/close-source", {});
+}
+
 export function toggleBackendPause(paused?: boolean) {
   return postJson<BackendSession>("/session/pause", { paused: paused ?? null });
 }
@@ -187,6 +200,10 @@ export function resetBackendSession() {
   return postJson<BackendSession>("/session/reset", {});
 }
 
+export function finishBackendSession() {
+  return postJson<BackendSession>("/session/finish", {});
+}
+
 export async function downloadLatestBackendReport(filename = "relatorio-ultima-corrida.pdf") {
   const response = await fetch(createBackendReportUrl());
   if (!response.ok) {
@@ -198,6 +215,36 @@ export async function downloadLatestBackendReport(filename = "relatorio-ultima-c
       }
     } catch {
       // fallback para mensagem genérica
+    }
+    throw new Error(detail);
+  }
+
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    anchor.rel = "noreferrer";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  } finally {
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  }
+}
+
+export async function downloadBackendSnapshot(filename = "screenshot.jpg") {
+  const response = await fetch(createBackendSnapshotUrl());
+  if (!response.ok) {
+    let detail = `API error ${response.status} on /media/snapshot`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) {
+        detail = payload.detail;
+      }
+    } catch {
+      // mantém a mensagem genérica
     }
     throw new Error(detail);
   }

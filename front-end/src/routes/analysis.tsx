@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
@@ -124,6 +124,14 @@ function AnalysisPage() {
   const lastTelemetryCountRef = useRef<number | null>(null);
   const lastSamplePositionRef = useRef<number | null>(null);
   const samplesRef = useRef<Sample[]>([]);
+  const handleReturnToDashboard = async () => {
+    if (window.electronAPI?.closeAnalysisWindow) {
+      await window.electronAPI.closeAnalysisWindow();
+      return;
+    }
+
+    window.location.href = "/";
+  };
 
   const syncSamplesFromSession = (session: BackendSession) => {
     const nextSessionId = session.session_id ?? null;
@@ -299,16 +307,16 @@ function AnalysisPage() {
         </div>
 
         <div className="flex-1 px-4 py-4">
-          <Link
-            to="/"
-            className="flex items-center gap-3 rounded-xl border border-border bg-surface/60 px-3 py-3 text-sm transition hover:bg-surface-2"
+          <button
+            onClick={() => void handleReturnToDashboard()}
+            className="flex items-center gap-3 rounded-xl border border-border bg-surface/60 px-3 py-3 text-left text-sm transition hover:bg-surface-2"
           >
             <ArrowLeft className="h-4 w-4 text-brand" />
             <div>
               <div className="font-semibold">Voltar ao painel</div>
               <div className="text-[11px] text-muted-foreground">Player principal e controles</div>
             </div>
-          </Link>
+          </button>
         </div>
 
         <div className="m-3 rounded-lg border border-success/30 bg-success/5 p-3">
