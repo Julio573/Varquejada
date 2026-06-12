@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
 from api.dependencies import get_session_event_hub, get_session_manager
+from api.schemas import SessionPongEvent, SessionSnapshot, SessionSnapshotEvent
 from core.session_events import SessionEventHub
 from core.session_manager import SessionManager
 
@@ -18,11 +19,10 @@ async def session_stream(
     await hub.connect(websocket)
     try:
         await websocket.send_json(
-            {
-                "type": "session.snapshot",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "session": manager.snapshot(),
-            }
+            SessionSnapshotEvent(
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                session=SessionSnapshot.model_validate(manager.snapshot()),
+            ).model_dump(mode="json")
         )
 
         while True:
@@ -31,19 +31,17 @@ async def session_stream(
 
             if normalized in {"ping", "pong"}:
                 await websocket.send_json(
-                    {
-                        "type": "session.pong",
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "session": manager.snapshot(),
-                    }
+                    SessionPongEvent(
+                        timestamp=datetime.now(timezone.utc).isoformat(),
+                        session=SessionSnapshot.model_validate(manager.snapshot()),
+                    ).model_dump(mode="json")
                 )
             elif normalized == "snapshot":
                 await websocket.send_json(
-                    {
-                        "type": "session.snapshot",
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "session": manager.snapshot(),
-                    }
+                    SessionSnapshotEvent(
+                        timestamp=datetime.now(timezone.utc).isoformat(),
+                        session=SessionSnapshot.model_validate(manager.snapshot()),
+                    ).model_dump(mode="json")
                 )
     except WebSocketDisconnect:
         return

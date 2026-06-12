@@ -1,11 +1,79 @@
 const path = require("node:path");
-const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
+const { pathToFileURL } = require("node:url");
+const { app, BrowserWindow, dialog, ipcMain, screen, shell } = require("electron");
 
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 app.on("browser-window-created", (_, window) => {
   window.setMenuBarVisibility(false);
   window.setAutoHideMenuBar(true);
 });
+
+let analysisWindow = null;
+
+function getAppUrl(route = "/") {
+  const isDev = !app.isPackaged;
+  const baseUrl = process.env.ELECTRON_START_URL
+    ? process.env.ELECTRON_START_URL
+    : isDev
+      ? "http://127.0.0.1:5173"
+      : pathToFileURL(path.join(app.getAppPath(), "dist", "index.html")).href;
+  const url = new URL(baseUrl);
+  url.searchParams.set("route", route);
+  return url.href;
+}
+
+function getPreferredDisplay() {
+  const displays = screen.getAllDisplays();
+  if (displays.length < 2) {
+    return screen.getPrimaryDisplay();
+  }
+
+  const primaryDisplay = screen.getPrimaryDisplay();
+  return displays.find((display) => display.id !== primaryDisplay.id) ?? primaryDisplay;
+}
+
+function createAppWindow({
+  title,
+  route = "/",
+  display,
+  width = 1600,
+  height = 980,
+} = {}) {
+  const bounds = display?.workArea ?? null;
+  const win = new BrowserWindow({
+    width: bounds?.width ?? width,
+    height: bounds?.height ?? height,
+    x: bounds?.x ?? undefined,
+    y: bounds?.y ?? undefined,
+    minWidth: 1280,
+    minHeight: 820,
+    maximizable: true,
+    backgroundColor: "#0b0d14",
+    show: false,
+    title,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      backgroundThrottling: false,
+    },
+  });
+
+  win.once("ready-to-show", () => {
+    win.maximize();
+    win.show();
+  });
+
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: "deny" };
+  });
+
+  win.loadURL(getAppUrl(route));
+
+  return win;
+}
 
 ipcMain.handle("select-video-file", async () => {
   const result = await dialog.showOpenDialog({
@@ -24,45 +92,46 @@ ipcMain.handle("select-video-file", async () => {
   return result.filePaths[0];
 });
 
-function createWindow() {
-  const win = new BrowserWindow({
-    width: 1600,
-    height: 980,
-    minWidth: 1280,
-    minHeight: 820,
-    maximizable: true,
-    backgroundColor: "#0b0d14",
-    show: false,
-    title: "VeloVaquejo Pro",
-    webPreferences: {
-      preload: path.join(__dirname, "preload.cjs"),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
-    },
+ipcMain.handle("open-analysis-window", async () => {
+  if (analysisWindow && !analysisWindow.isDestroyed()) {
+    if (analysisWindow.isMinimized()) {
+      analysisWindow.restore();
+    }
+    analysisWindow.focus();
+    return true;
+  }
+
+  analysisWindow = createAppWindow({
+    title: "VeloVaquejo Pro — Medições",
+    route: "/analysis",
+    display: getPreferredDisplay(),
   });
 
-  win.once("ready-to-show", () => {
-    win.maximize();
-    win.show();
-  });
-
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
-    return { action: "deny" };
+  analysisWindow.on("closed", () => {
+    analysisWindow = null;
   });
 
   const isDev = !app.isPackaged;
-  const targetUrl = process.env.ELECTRON_START_URL
-    ? process.env.ELECTRON_START_URL
-    : isDev
-      ? "http://127.0.0.1:5173"
-      : `file://${path.join(app.getAppPath(), "dist", "index.html")}`;
-  win.loadURL(targetUrl);
+  if (isDev && process.env.ELECTRON_OPEN_DEVTOOLS === "1") {
+    analysisWindow.webContents.openDevTools({ mode: "detach" });
+  }
 
+  return true;
+});
+
+function createWindow() {
+  const win = createAppWindow({
+    title: "VeloVaquejo Pro",
+    route: "/",
+    display: screen.getPrimaryDisplay(),
+  });
+
+  const isDev = !app.isPackaged;
   if (isDev && process.env.ELECTRON_OPEN_DEVTOOLS === "1") {
     win.webContents.openDevTools({ mode: "detach" });
   }
+
+  return win;
 }
 
 app.whenReady().then(() => {

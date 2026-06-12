@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useLocation, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import {
   Home,
@@ -144,6 +144,117 @@ function formatCaptureInfo(capture: BackendCapture | null) {
   };
 }
 
+function hasRenderableBox(telemetry: BackendFrameEvent["telemetry"] | null) {
+  const rawBox = telemetry?.horse_bbox ?? telemetry?.bbox;
+  return Array.isArray(rawBox) && rawBox.length >= 4;
+}
+
+function drawTrackingOverlay(
+  canvas: HTMLCanvasElement,
+  sourceWidth: number,
+  sourceHeight: number,
+  telemetry: BackendFrameEvent["telemetry"] | null,
+) {
+  const context = canvas.getContext("2d");
+  if (!context) return;
+
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0 || sourceWidth <= 0 || sourceHeight <= 0) {
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    return;
+  }
+
+  const dpr = window.devicePixelRatio || 1;
+  const nextWidth = Math.max(1, Math.floor(rect.width * dpr));
+  const nextHeight = Math.max(1, Math.floor(rect.height * dpr));
+  if (canvas.width !== nextWidth || canvas.height !== nextHeight) {
+    canvas.width = nextWidth;
+    canvas.height = nextHeight;
+  }
+
+  context.setTransform(dpr, 0, 0, dpr, 0, 0);
+  context.clearRect(0, 0, rect.width, rect.height);
+
+  const rawBox = telemetry?.horse_bbox ?? telemetry?.bbox;
+  if (!rawBox || rawBox.length < 4) {
+    return;
+  }
+
+  const [rawX, rawY, rawW, rawH] = rawBox;
+  const scale = Math.min(rect.width / sourceWidth, rect.height / sourceHeight);
+  const drawnWidth = sourceWidth * scale;
+  const drawnHeight = sourceHeight * scale;
+  const offsetX = (rect.width - drawnWidth) / 2;
+  const offsetY = (rect.height - drawnHeight) / 2;
+
+  const x = offsetX + rawX * scale;
+  const y = offsetY + rawY * scale;
+  const w = rawW * scale;
+  const h = rawH * scale;
+  const centerX = x + w / 2;
+
+  const speed = telemetry?.speed_kmh ?? 0;
+  const confidence = Math.round((telemetry?.confidence ?? 0) * 100);
+  const badgeText = `${speed.toFixed(1)} KM/H  •  ${confidence}%`;
+
+  const accent = "#F0903A";
+  const accentSoft = "rgba(240, 144, 58, 0.14)";
+  const border = "rgba(255, 255, 255, 0.85)";
+  const panel = "rgba(10, 12, 18, 0.82)";
+
+  context.font = "600 13px Rajdhani, Inter, sans-serif";
+  const textWidth = context.measureText(badgeText).width;
+  const badgeWidth = Math.max(138, Math.ceil(textWidth + 32));
+  const badgeHeight = 34;
+  const badgeX = Math.max(8, Math.min(rect.width - badgeWidth - 8, centerX - badgeWidth / 2));
+  const badgeY = Math.max(8, y - badgeHeight - 16);
+
+  const drawRoundedRect = (x0: number, y0: number, width: number, height: number, radius: number) => {
+    const x1 = x0 + width;
+    const y1 = y0 + height;
+    const r = Math.min(radius, width / 2, height / 2);
+    context.beginPath();
+    context.moveTo(x0 + r, y0);
+    context.lineTo(x1 - r, y0);
+    context.quadraticCurveTo(x1, y0, x1, y0 + r);
+    context.lineTo(x1, y1 - r);
+    context.quadraticCurveTo(x1, y1, x1 - r, y1);
+    context.lineTo(x0 + r, y1);
+    context.quadraticCurveTo(x0, y1, x0, y1 - r);
+    context.lineTo(x0, y0 + r);
+    context.quadraticCurveTo(x0, y0, x0 + r, y0);
+    context.closePath();
+  };
+
+  context.lineWidth = 2;
+  context.strokeStyle = accent;
+  context.fillStyle = accentSoft;
+  drawRoundedRect(x, y, w, h, 12);
+  context.fill();
+  context.stroke();
+
+  context.fillStyle = panel;
+  context.strokeStyle = "rgba(255, 255, 255, 0.14)";
+  drawRoundedRect(badgeX, badgeY, badgeWidth, badgeHeight, 14);
+  context.fill();
+  context.stroke();
+
+  context.fillStyle = accent;
+  drawRoundedRect(badgeX, badgeY, 5, badgeHeight, 14);
+  context.fill();
+
+  context.strokeStyle = accent;
+  context.lineWidth = 2;
+  context.beginPath();
+  context.moveTo(centerX, badgeY + badgeHeight);
+  context.lineTo(centerX, Math.max(badgeY + badgeHeight + 10, y - 3));
+  context.stroke();
+
+  context.fillStyle = border;
+  context.textBaseline = "middle";
+  context.fillText(badgeText, badgeX + 15, badgeY + badgeHeight / 2 + 0.5);
+}
+
 function formatFileUrl(filePath: string) {
   if (typeof window !== "undefined" && window.electronAPI?.pathToFileUrl) {
     return window.electronAPI.pathToFileUrl(filePath);
@@ -153,13 +264,18 @@ function formatFileUrl(filePath: string) {
 }
 
 const navItems = [
-  { icon: Home, label: "Painel Principal", active: true },
-  { icon: LineChart, label: "Medições" },
+  { icon: Home, label: "Painel Principal", to: "/" },
+  {
+    icon: LineChart,
+    label: "Medições",
+    to: "/analysis",
+    action: "open-analysis-window",
+  },
   { icon: Calendar, label: "Histórico" },
   { icon: Settings, label: "Configurações" },
   { icon: Video, label: "Câmeras" },
   { icon: Crosshair, label: "Calibração" },
-  { icon: FileText, label: "Relatórios" },
+  { icon: FileText, label: "Relatórios", to: "/reports" },
 ];
 
 function HorseLogo({ className = "" }: { className?: string }) {
@@ -181,13 +297,17 @@ function HorseLogo({ className = "" }: { className?: string }) {
 
 function Dashboard() {
   const now = useClock();
+  const location = useLocation();
+  const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const playerShellRef = useRef<HTMLDivElement | null>(null);
   const controlsTimerRef = useRef<number | null>(null);
   const frameFlushTimerRef = useRef<number | null>(null);
-  const pendingFrameSrcRef = useRef<string | null>(null);
   const pendingTelemetryRef = useRef<BackendFrameEvent["telemetry"] | null>(null);
+  const lastOverlayTelemetryRef = useRef<BackendFrameEvent["telemetry"] | null>(null);
+  const selectedVideoPathRef = useRef<string | null>(null);
   const [backendHealth, setBackendHealth] = useState<BackendHealth | null>(null);
   const [backendSession, setBackendSession] = useState<BackendSession | null>(null);
   const [backendError, setBackendError] = useState<string | null>(null);
@@ -233,9 +353,6 @@ function Dashboard() {
   useEffect(() => {
     const flushFrame = () => {
       frameFlushTimerRef.current = null;
-      if (pendingFrameSrcRef.current) {
-        setFrameSrc(pendingFrameSrcRef.current);
-      }
       setLiveTelemetry(pendingTelemetryRef.current);
     };
 
@@ -251,13 +368,23 @@ function Dashboard() {
       setBackendError(null);
 
       if (event.type === "frame.update") {
+        setBackendSession(event.session);
         pendingTelemetryRef.current = event.telemetry;
-        pendingFrameSrcRef.current = `data:${event.frame.mime_type};base64,${event.frame.data}`;
+        if (event.frame) {
+          setFrameSrc(`data:${event.frame.mime_type};base64,${event.frame.data}`);
+        }
+        if (hasRenderableBox(event.telemetry)) {
+          lastOverlayTelemetryRef.current = event.telemetry;
+        }
         scheduleFrameFlush();
         return;
       }
 
       setBackendSession(event.session);
+      const sessionTelemetry = (event.session.telemetry ?? null) as BackendFrameEvent["telemetry"] | null;
+      if (hasRenderableBox(sessionTelemetry)) {
+        lastOverlayTelemetryRef.current = sessionTelemetry;
+      }
     });
   }, []);
 
@@ -316,13 +443,13 @@ function Dashboard() {
       setCommandError(null);
       setFrameSrc(null);
       setLiveTelemetry(null);
-      pendingFrameSrcRef.current = null;
       pendingTelemetryRef.current = null;
       setIsPlayerControlsVisible(true);
       setVideoLoadError(null);
 
       const selectedPath = await window.electronAPI?.selectVideoFile?.();
       if (selectedPath) {
+        selectedVideoPathRef.current = selectedPath;
         setVideoUrl(createBackendMediaUrl(selectedPath));
         setPlayerCurrentTime(0);
         setPlayerDuration(0);
@@ -356,8 +483,8 @@ function Dashboard() {
 
     setFrameSrc(null);
     setLiveTelemetry(null);
-    pendingFrameSrcRef.current = null;
     pendingTelemetryRef.current = null;
+    selectedVideoPathRef.current = filePath;
     setVideoUrl(createBackendMediaUrl(filePath));
     setPlayerCurrentTime(0);
     setPlayerDuration(0);
@@ -372,8 +499,8 @@ function Dashboard() {
     setFrameSrc(null);
     setIsPlayerControlsVisible(false);
     setVideoLoadError(null);
-    pendingFrameSrcRef.current = null;
     pendingTelemetryRef.current = null;
+    selectedVideoPathRef.current = null;
     await executeCommand("Abrindo câmera", () => openBackendCamera(0));
   };
 
@@ -434,7 +561,6 @@ function Dashboard() {
     setIsMuted(false);
     setIsPlayerControlsVisible(false);
     setVideoLoadError(null);
-    pendingFrameSrcRef.current = null;
     pendingTelemetryRef.current = null;
     await executeCommand("Resetando sessão", () => resetBackendSession());
   };
@@ -603,6 +729,82 @@ function Dashboard() {
     playerDurationSeconds > 0 ? Math.min(100, (playerPositionSeconds / playerDurationSeconds) * 100) : 0;
   const playerTimeLabel = `${formatClock(playerPositionSeconds)} / ${formatClock(playerDurationSeconds)}`;
   const playerSpeedLabel = `${(backendSession?.speed ?? 1).toFixed(1)}x`;
+  const navActivePath = location.pathname;
+  const sidebarNavItems = navItems.map((item) => ({
+    ...item,
+    isActive: item.to ? navActivePath === item.to : false,
+  }));
+
+  useEffect(() => {
+    if (hasRenderableBox(liveTelemetry)) {
+      lastOverlayTelemetryRef.current = liveTelemetry;
+    }
+  }, [liveTelemetry]);
+
+  useEffect(() => {
+    if (hasRenderableBox(sessionTelemetry)) {
+      lastOverlayTelemetryRef.current = sessionTelemetry;
+    }
+  }, [sessionTelemetry]);
+
+  useEffect(() => {
+    const canvas = overlayCanvasRef.current;
+    const shell = playerShellRef.current;
+    if (!canvas || !shell || !isVideoSource) {
+      return;
+    }
+
+    const redraw = () => {
+      const sourceWidth = backendSession?.capture?.width ?? videoRef.current?.videoWidth ?? 0;
+      const sourceHeight = backendSession?.capture?.height ?? videoRef.current?.videoHeight ?? 0;
+      drawTrackingOverlay(
+        canvas,
+        sourceWidth,
+        sourceHeight,
+        liveTelemetry ?? sessionTelemetry ?? lastOverlayTelemetryRef.current,
+      );
+    };
+
+    redraw();
+
+    const ResizeObserverCtor = window.ResizeObserver;
+    let observer: ResizeObserver | null = null;
+    if (ResizeObserverCtor) {
+      observer = new ResizeObserverCtor(() => redraw());
+      observer.observe(shell);
+    }
+
+    const video = videoRef.current;
+    const handleLoadedMetadata = () => redraw();
+    video?.addEventListener("loadedmetadata", handleLoadedMetadata);
+
+    return () => {
+      observer?.disconnect();
+      video?.removeEventListener("loadedmetadata", handleLoadedMetadata);
+    };
+  }, [
+    backendSession?.capture?.height,
+    backendSession?.capture?.width,
+    isVideoSource,
+    liveTelemetry,
+    sessionTelemetry,
+    videoUrl,
+  ]);
+
+  const handleSidebarAction = async (to?: string, action?: string) => {
+    if (action === "open-analysis-window") {
+      if (window.electronAPI?.openAnalysisWindow) {
+        await window.electronAPI.openAnalysisWindow();
+        return;
+      }
+      void navigate({ to: "/analysis" });
+      return;
+    }
+
+    if (to) {
+      void navigate({ to: to as "/" | "/analysis" | "/reports" });
+    }
+  };
 
   return (
     <div className="dark flex h-screen overflow-hidden bg-background text-foreground">
@@ -628,17 +830,18 @@ function Dashboard() {
         </div>
 
         <nav className="flex-1 space-y-1 px-3 py-4">
-          {navItems.map(({ icon: Icon, label, active }) => (
+          {sidebarNavItems.map(({ icon: Icon, label, to, isActive, action }) => (
             <button
               key={label}
+              onClick={() => void handleSidebarAction(to, action)}
               className={[
                 "group relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
-                active
+                isActive
                   ? "bg-brand/10 text-brand"
                   : "text-muted-foreground hover:bg-surface-2 hover:text-foreground",
               ].join(" ")}
             >
-              {active && (
+              {isActive && (
                 <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r bg-brand" />
               )}
               <Icon className="h-4 w-4" />
@@ -749,7 +952,7 @@ function Dashboard() {
                       <img
                         src={frameSrc}
                         alt="Quadro processado pelo backend"
-                        className="absolute inset-0 h-full w-full object-contain"
+                        className="absolute inset-0 h-full w-full object-contain bg-black"
                       />
                     ) : (
                       <div className="absolute inset-0 flex items-center justify-center bg-black">
@@ -890,10 +1093,10 @@ function Dashboard() {
                   <div className="relative h-full min-h-[560px] w-full xl:min-h-[680px]">
                     <img
                       src={frameSrc}
-                      alt="Quadro ao vivo"
-                      className="absolute inset-0 h-full w-full object-contain"
+                      alt="Quadro processado pelo backend"
+                      className="absolute inset-0 h-full w-full object-contain bg-black"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-transparent to-black/80" />
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/70" />
 
                     <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full border border-white/10 bg-black/55 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/90 backdrop-blur-xl">
                       <span className="h-2 w-2 rounded-full bg-success shadow-[0_0_12px_rgba(34,197,94,0.85)]" />

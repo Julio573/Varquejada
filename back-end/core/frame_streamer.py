@@ -9,6 +9,7 @@ from typing import Any
 
 import cv2
 
+from api.schemas import FramePayload, FrameUpdateEvent, SessionSnapshot, SessionTelemetry
 from core.session_events import SessionEventHub
 from core.session_manager import SessionManager
 from processing.horse_tracker import HorseTracker
@@ -123,8 +124,7 @@ class SessionFrameStreamer:
             else:
                 session_snapshot = self._manager.snapshot()
                 telemetry = dict(session_snapshot.get("telemetry") or self._last_telemetry)
-                # Mantém a última box desenhada em todos os frames intermediários.
-                # Assim a telemetria não pisca quando a análise é feita em stride menor.
+                # Mantém a última box desenhada nos frames intermediários para evitar flicker.
                 frame_to_send = self._tracker.draw_tracking(frame, None, None)
 
             frame_to_send = self._resize_frame(frame_to_send)
@@ -133,20 +133,20 @@ class SessionFrameStreamer:
                 self._sleep(0.02)
                 continue
 
-            payload = {
-                "type": "frame.update",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "session": session_snapshot,
-                "frame": {
-                    "mime_type": "image/jpeg",
-                    "encoding": "base64",
-                    "width": int(frame_to_send.shape[1]),
-                    "height": int(frame_to_send.shape[0]),
-                    "data": encoded_frame,
-                },
-                "telemetry": telemetry,
-            }
-            self._broadcast(payload)
+            frame_payload = FramePayload(
+                mime_type="image/jpeg",
+                width=int(frame_to_send.shape[1]),
+                height=int(frame_to_send.shape[0]),
+                data=encoded_frame,
+            )
+
+            payload = FrameUpdateEvent(
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                session=SessionSnapshot.model_validate(session_snapshot),
+                frame=frame_payload,
+                telemetry=SessionTelemetry.model_validate(telemetry),
+            )
+            self._broadcast(payload.model_dump(mode="json"))
 
             speed_factor = max(0.1, float(frame_snapshot.get("speed") or 1.0))
             if source_type == "video":
@@ -224,7 +224,7 @@ class SessionFrameStreamer:
         payload: dict[str, Any] = {
             "type": event_type,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "session": session,
+            "session": SessionSnapshot.model_validate(session).model_dump(mode="json"),
         }
         if extra:
             payload.update(extra)

@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 import threading
@@ -6,6 +7,7 @@ import sys
 
 import cv2
 
+from core.session_report import build_session_report
 from processing.auto_calibration import AutoCalibrator
 
 
@@ -18,6 +20,8 @@ class SessionManager:
     source_type: str = "idle"
     source_value: str | int | None = None
     session_id: int = 0
+    session_started_at: str | None = None
+    session_finished_at: str | None = None
     is_running: bool = False
     is_paused: bool = False
     speed: float = 1.0
@@ -26,11 +30,18 @@ class SessionManager:
     markers: list[dict[str, Any]] = field(default_factory=list)
     calibration: dict[str, Any] | None = None
     telemetry: dict[str, Any] = field(default_factory=dict)
+    telemetry_history: list[dict[str, Any]] = field(default_factory=list)
+    last_report_path: str | None = None
     last_error: str | None = None
 
     _lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False)
     _capture: cv2.VideoCapture | None = field(default=None, init=False, repr=False)
     _calibrator: AutoCalibrator = field(default_factory=AutoCalibrator, init=False, repr=False)
+    _reports_dir: Path = field(
+        default_factory=lambda: Path(__file__).resolve().parents[1] / "reports",
+        init=False,
+        repr=False,
+    )
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
@@ -39,6 +50,8 @@ class SessionManager:
                 "source_type": self.source_type,
                 "source_value": self.source_value,
                 "session_id": self.session_id,
+                "session_started_at": self.session_started_at,
+                "session_finished_at": self.session_finished_at,
                 "is_running": self.is_running,
                 "is_paused": self.is_paused,
                 "speed": self.speed,
@@ -47,6 +60,8 @@ class SessionManager:
                 "markers": [dict(marker) for marker in self.markers],
                 "calibration": dict(self.calibration) if self.calibration else None,
                 "telemetry": dict(self.telemetry),
+                "telemetry_history_count": len(self.telemetry_history),
+                "last_report_path": self.last_report_path,
                 "last_error": self.last_error,
                 "capture": capture_info,
             }
@@ -152,10 +167,13 @@ class SessionManager:
 
     def reset(self) -> None:
         with self._lock:
+            self._finalize_current_session_locked("reset")
             self._release_capture_locked()
             self.source_type = "idle"
             self.source_value = None
             self.session_id += 1
+            self.session_started_at = None
+            self.session_finished_at = datetime.now(timezone.utc).isoformat()
             self.is_running = False
             self.is_paused = False
             self.speed = 1.0
@@ -164,6 +182,7 @@ class SessionManager:
             self.markers.clear()
             self.calibration = None
             self.telemetry.clear()
+            self.telemetry_history.clear()
             self.last_error = None
 
     def read_frame(self) -> tuple[bool, Any | None, dict[str, Any]]:
@@ -198,15 +217,28 @@ class SessionManager:
     def update_telemetry(self, telemetry: dict[str, Any]) -> dict[str, Any]:
         with self._lock:
             self.telemetry = dict(telemetry)
-            if "speed" in telemetry:
-                try:
-                    self.verdict = telemetry.get("verdict", self.verdict)
-                except Exception:
-                    pass
+            self.telemetry_history.append(
+                {
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "position_seconds": self._position_seconds_locked(),
+                    "position_ms": self._position_ms_locked(),
+                    "timecode": str(telemetry.get("timecode", "--:--.--")),
+                    "speed_kmh": float(telemetry.get("speed_kmh", 0.0) or 0.0),
+                    "distance_m": float(telemetry.get("distance_m", 0.0) or 0.0),
+                    "confidence": float(telemetry.get("confidence", 0.0) or 0.0),
+                    "fps": float(telemetry.get("fps", 0.0) or 0.0),
+                }
+            )
+            if len(self.telemetry_history) > 3600:
+                self.telemetry_history = self.telemetry_history[-3600:]
+
+            if "verdict" in telemetry:
+                self.verdict = str(telemetry.get("verdict", self.verdict))
             return self.snapshot()
 
     def _open_capture(self, source_type: str, source_value: str | int) -> dict[str, Any]:
         with self._lock:
+            self._finalize_current_session_locked("source-change")
             self._release_capture_locked()
 
             if source_type == "video":
@@ -232,6 +264,8 @@ class SessionManager:
             self.source_type = source_type
             self.source_value = source_value
             self.session_id += 1
+            self.session_started_at = datetime.now(timezone.utc).isoformat()
+            self.session_finished_at = None
             self.is_running = True
             self.is_paused = False
             self.speed = 1.0
@@ -239,6 +273,7 @@ class SessionManager:
             self.markers.clear()
             self.calibration = None
             self.telemetry.clear()
+            self.telemetry_history.clear()
             self.ppm = None
             self.last_error = None
             return self.snapshot()
@@ -290,6 +325,12 @@ class SessionManager:
 
         return 0
 
+    def _position_seconds_locked(self) -> float | None:
+        position_ms = self._position_ms_locked()
+        if position_ms is None:
+            return None
+        return round(position_ms / 1000.0, 3)
+
     def _duration_ms_locked(self) -> int | None:
         if self._capture is None or not self._capture.isOpened():
             return None
@@ -300,3 +341,90 @@ class SessionManager:
             return int((frame_count / fps) * 1000.0)
 
         return None
+
+    def _build_report_payload_locked(self, reason: str) -> dict[str, Any]:
+        capture_info = self._capture_info_locked()
+        telemetry_history = [dict(sample) for sample in self.telemetry_history]
+        speeds = [float(sample.get("speed_kmh", 0.0) or 0.0) for sample in telemetry_history]
+        positions = [float(sample.get("position_seconds", 0.0) or 0.0) for sample in telemetry_history]
+        distances = [float(sample.get("distance_m", 0.0) or 0.0) for sample in telemetry_history]
+        confidences = [float(sample.get("confidence", 0.0) or 0.0) for sample in telemetry_history]
+
+        max_speed = max(speeds) if speeds else 0.0
+        min_speed = min(speeds) if speeds else 0.0
+        avg_speed = sum(speeds) / len(speeds) if speeds else 0.0
+        trend = speeds[-1] - speeds[0] if len(speeds) >= 2 else 0.0
+
+        peak_accel = 0.0
+        time_above_40 = 0.0
+        for idx in range(1, len(telemetry_history)):
+            prev = telemetry_history[idx - 1]
+            curr = telemetry_history[idx]
+            prev_t = float(prev.get("position_seconds", 0.0) or 0.0)
+            curr_t = float(curr.get("position_seconds", 0.0) or 0.0)
+            delta_t = max(0.0, curr_t - prev_t)
+            if delta_t <= 0:
+                continue
+
+            prev_speed = float(prev.get("speed_kmh", 0.0) or 0.0)
+            curr_speed = float(curr.get("speed_kmh", 0.0) or 0.0)
+            accel = (curr_speed - prev_speed) / delta_t
+            peak_accel = max(peak_accel, accel)
+            if prev_speed >= 40.0 or curr_speed >= 40.0:
+                time_above_40 += delta_t
+
+        if max_speed > 0:
+            variance = sum((speed - avg_speed) ** 2 for speed in speeds) / len(speeds)
+            std_dev = variance ** 0.5
+            consistency = max(0.0, 100.0 - (std_dev / max_speed) * 100.0)
+        else:
+            consistency = 0.0
+
+        first_position = positions[0] if positions else None
+        last_position = positions[-1] if positions else None
+        duration_seconds = None
+        if first_position is not None and last_position is not None:
+            duration_seconds = max(0.0, last_position - first_position)
+
+        return {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "reason": reason,
+            "session": self.snapshot(),
+            "capture": capture_info,
+            "markers": [dict(marker) for marker in self.markers],
+            "samples": telemetry_history,
+            "metrics": {
+                "sample_count": len(telemetry_history),
+                "max_speed_kmh": round(max_speed, 2),
+                "min_speed_kmh": round(min_speed, 2),
+                "avg_speed_kmh": round(avg_speed, 2),
+                "trend_kmh": round(trend, 2),
+                "peak_acceleration_kmh_s": round(peak_accel, 2),
+                "time_above_40_s": round(time_above_40, 2),
+                "consistency_pct": round(consistency, 2),
+                "distance_m": round(distances[-1] if distances else 0.0, 2),
+                "avg_confidence": round((sum(confidences) / len(confidences)) if confidences else 0.0, 3),
+                "duration_seconds": round(duration_seconds, 2) if duration_seconds is not None else None,
+            },
+        }
+
+    def _finalize_current_session_locked(self, reason: str) -> str | None:
+        if self.source_type == "idle" and not self.telemetry_history and not self.markers:
+            self.session_finished_at = datetime.now(timezone.utc).isoformat()
+            return None
+
+        payload = self._build_report_payload_locked(reason)
+        if not payload["metrics"]["sample_count"] and not payload["markers"]:
+            self.session_finished_at = payload["generated_at"]
+            return None
+
+        try:
+            report_path = build_session_report(payload, self._reports_dir)
+        except Exception as exc:
+            self.last_error = f"Falha ao gerar relatório: {exc}"
+            self.session_finished_at = payload["generated_at"]
+            return None
+
+        self.last_report_path = str(report_path)
+        self.session_finished_at = payload["generated_at"]
+        return self.last_report_path

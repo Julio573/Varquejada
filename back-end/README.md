@@ -43,6 +43,12 @@ Para subir a nova API do backend:
 python3 server.py
 ```
 
+Se quiser recarregamento automático em desenvolvimento, use:
+
+```bash
+UVICORN_RELOAD=1 python3 server.py
+```
+
 Isso inicia o FastAPI em `http://localhost:8000` com:
 
 - `GET /health`
@@ -56,6 +62,8 @@ Isso inicia o FastAPI em `http://localhost:8000` com:
 - `POST /session/marker`
 - `POST /session/calibrate`
 - `POST /session/reset`
+- `GET /reports`
+- `GET /reports/latest`
 - `WS /ws/session`
 
 O app PyQt antigo continua no arquivo `main.py`, mas a integração nova com Electron deve partir da API.
@@ -83,6 +91,9 @@ O endpoint `WS /ws/session` envia mensagens JSON com este formato:
 ```
 
 Ao conectar, o cliente recebe um snapshot inicial da sessão e depois passa a receber novas versões sempre que os comandos HTTP alteram o estado.
+
+Quando uma sessão é encerrada por `POST /session/reset` ou por troca de fonte, o backend gera automaticamente um PDF em `back-end/reports/` com o resumo da corrida, métricas principais, marcadores e amostras de velocidade. O arquivo mais recente pode ser baixado em `GET /reports/latest`.
+O índice de todos os PDFs gerados pode ser consultado em `GET /reports`.
 
 ## 🧠 Modelos (IA)
 

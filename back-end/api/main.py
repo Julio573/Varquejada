@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.routers.health import router as health_router
 from api.routers.media import router as media_router
+from api.routers.reports import router as reports_router
 from api.routers.session import router as session_router
 from api.routers.session_ws import router as session_ws_router
 from core.frame_streamer import SessionFrameStreamer
@@ -34,6 +35,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(media_router, prefix="/media", tags=["media"])
+    app.include_router(reports_router, prefix="/reports", tags=["reports"])
     app.include_router(session_router, prefix="/session", tags=["session"])
     app.include_router(session_ws_router, prefix="/ws", tags=["session-ws"])
 

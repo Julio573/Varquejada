@@ -4,6 +4,7 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useLocation,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -126,8 +127,37 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <WindowRouteBootstrap />
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
     </QueryClientProvider>
   );
+}
+
+function WindowRouteBootstrap() {
+  const router = useRouter();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const route = new URL(window.location.href).searchParams.get("route");
+    if (!route) {
+      return;
+    }
+
+    const nextRoute = route === "/analysis" || route === "/reports" ? route : "/";
+    if (location.pathname === nextRoute) {
+      return;
+    }
+
+    void router.navigate({
+      to: nextRoute,
+      replace: true,
+    });
+  }, [location.pathname, router]);
+
+  return null;
 }

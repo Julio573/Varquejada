@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   backendBaseUrl,
   platform: process.platform,
   versions: process.versions,
+  openAnalysisWindow: () => ipcRenderer.invoke("open-analysis-window"),
   selectVideoFile: () => ipcRenderer.invoke("select-video-file"),
   pathToFileUrl: (filePath) => pathToFileURL(filePath).href,
 });

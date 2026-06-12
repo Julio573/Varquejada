@@ -9,6 +9,8 @@ export type BackendSession = {
   source_type: string;
   source_value: string | number | null;
   session_id?: number;
+  session_started_at?: string | null;
+  session_finished_at?: string | null;
   is_running: boolean;
   is_paused: boolean;
   speed: number;
@@ -17,6 +19,8 @@ export type BackendSession = {
   markers: Array<Record<string, unknown>>;
   calibration: Record<string, unknown> | null;
   telemetry?: Record<string, unknown>;
+  telemetry_history_count?: number;
+  last_report_path?: string | null;
   last_error: string | null;
   capture: BackendCapture | null;
 };
@@ -34,7 +38,7 @@ export type BackendFrameEvent = {
   type: "frame.update";
   timestamp: string;
   session: BackendSession;
-  frame: {
+  frame?: {
     mime_type: string;
     encoding: "base64";
     width: number;
@@ -66,6 +70,13 @@ export type BackendCapture = {
   duration_seconds: number | null;
 };
 
+export type BackendReportItem = {
+  filename: string;
+  path: string;
+  size_bytes: number;
+  modified_at: string;
+};
+
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL;
@@ -80,6 +91,10 @@ export function createBackendMediaUrl(path: string) {
   const url = new URL("/media/file", API_BASE_URL);
   url.searchParams.set("path", path);
   return url.toString();
+}
+
+export function createBackendReportUrl() {
+  return new URL("/reports/latest", API_BASE_URL).toString();
 }
 
 async function requestJson<T>(path: string, signal?: AbortSignal): Promise<T> {
@@ -128,6 +143,10 @@ export function fetchBackendSession(signal?: AbortSignal) {
   return requestJson<BackendSession>("/session", signal);
 }
 
+export function fetchBackendReports(signal?: AbortSignal) {
+  return requestJson<BackendReportItem[]>("/reports", signal);
+}
+
 export function openBackendVideo(path: string) {
   return postJson<BackendSession>("/session/open-video", { path });
 }
@@ -168,6 +187,36 @@ export function resetBackendSession() {
   return postJson<BackendSession>("/session/reset", {});
 }
 
+export async function downloadLatestBackendReport(filename = "relatorio-ultima-corrida.pdf") {
+  const response = await fetch(createBackendReportUrl());
+  if (!response.ok) {
+    let detail = `API error ${response.status} on /reports/latest`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) {
+        detail = payload.detail;
+      }
+    } catch {
+      // fallback para mensagem genérica
+    }
+    throw new Error(detail);
+  }
+
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    anchor.rel = "noreferrer";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  } finally {
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  }
+}
+
 export function createBackendSessionSocket(
   onEvent: (event: BackendStreamEvent) => void,
   onStatus?: (message: string) => void,
@@ -196,8 +245,10 @@ export function createBackendSessionSocket(
           onEvent(payload);
           if (payload.type === "session.updated" && "action" in payload && payload.action) {
             onStatus?.(`Atualizado: ${payload.action}`);
-          } else if (payload.type === "frame.update") {
+          } else if (payload.type === "frame.update" && "frame" in payload && payload.frame) {
             onStatus?.("Frame atualizado");
+          } else if (payload.type === "frame.update") {
+            onStatus?.("Telemetria atualizada");
           }
         }
       } catch {
