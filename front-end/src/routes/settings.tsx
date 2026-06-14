@@ -15,7 +15,7 @@ import {
 export const Route = createFileRoute("/settings")({
   head: () => ({
     meta: [
-      { title: "VeloVaquejo Pro — Configurações" },
+      { title: "TrackJada Pro — Configurações" },
       {
         name: "description",
         content: "Preferências do player, janela de medições e comportamento da interface.",
@@ -167,7 +167,7 @@ function SettingsPage() {
           </div>
           <div>
             <div className="font-display text-xl font-bold tracking-wider">
-              VELO<span className="text-brand">VAQUEJO</span>
+              TRACK<span className="text-brand">JADA</span>
             </div>
             <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
               Configurações

@@ -28,7 +28,7 @@ import {
 export const Route = createFileRoute("/reports")({
   head: () => ({
     meta: [
-      { title: "VeloVaquejo Pro — Relatórios" },
+      { title: "TrackJada Pro — Relatórios" },
       {
         name: "description",
         content:
@@ -182,7 +182,7 @@ function ReportsPage() {
           </div>
           <div>
             <div className="font-display text-xl font-bold tracking-wider">
-              VELO<span className="text-brand">VAQUEJO</span>
+              TRACK<span className="text-brand">JADA</span>
             </div>
             <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
               Relatórios automáticos

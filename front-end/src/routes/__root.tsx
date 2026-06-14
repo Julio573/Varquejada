@@ -78,14 +78,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "VeloVaquejo Pro" },
+      { title: "TrackJada Pro" },
       {
         name: "description",
         content:
           "Painel profissional para análise e medição de velocidade em eventos de vaquejada.",
       },
-      { name: "author", content: "Varquejada System" },
-      { property: "og:title", content: "VeloVaquejo Pro" },
+      { name: "author", content: "TrackJada System" },
+      { property: "og:title", content: "TrackJada Pro" },
       {
         property: "og:description",
         content:
@@ -93,7 +93,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@VarquejadaSystem" },
+      { name: "twitter:site", content: "@TrackJadaSystem" },
     ],
     links: [
       {

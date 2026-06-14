@@ -26,7 +26,7 @@ class HeaderWidget(QFrame):
         self.logo_layout.setSpacing(0)
         self.logo_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         
-        self.logo_label = QLabel('<span style="color: #FFFFFF;">VELO</span><span style="color: #FF8C00;">VAQUEJO</span>')
+        self.logo_label = QLabel('<span style="color: #FFFFFF;">TRACK</span><span style="color: #FF8C00;">JADA</span>')
         self.logo_label.setObjectName("LogoLabel")
         
         self.subtitle_label = QLabel("Sistema de Medição de Velocidade")

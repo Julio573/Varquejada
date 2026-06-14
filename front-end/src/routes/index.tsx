@@ -52,7 +52,7 @@ import { loadAppSettings, saveLastSourcePath } from "@/lib/app-settings";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "VeloVaquejo Pro — Sistema de Medição de Velocidade" },
+      { title: "TrackJada Pro — Sistema de Medição de Velocidade" },
       {
         name: "description",
         content:
@@ -252,7 +252,7 @@ function Dashboard() {
     const stopSocket = createBackendSessionSocket((event) => {
       setBackendError(null);
 
-      if (event.type === "frame.update") {
+      if (event.type === "frame.update"  && "telemetry" in event) {
         setBackendSession(event.session);
         pendingTelemetryRef.current = event.telemetry;
         scheduleFrameFlush();
@@ -584,7 +584,7 @@ function Dashboard() {
   };
 
   return (
-    <div className="dark flex h-screen overflow-hidden bg-background text-foreground">
+    <div className="dark flex min-h-screen bg-background text-foreground">
       <input
         ref={fileInputRef}
         type="file"
@@ -598,7 +598,7 @@ function Dashboard() {
           <HorseLogo className="h-12 w-12 text-brand drop-shadow-[0_0_8px_oklch(0.72_0.18_55/0.6)]" />
           <div>
             <div className="font-display text-xl font-bold tracking-wider">
-              VELO<span className="text-brand">VAQUEJO</span>
+              TRACK<span className="text-brand">JADA</span>
             </div>
             <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
               Sistema de medição de velocidade
@@ -643,10 +643,10 @@ function Dashboard() {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-hidden">
+      <main className="flex-1 overflow-y-auto bg-background text-foreground">
         <header className="flex items-center justify-between gap-4 border-b border-border px-8 py-4">
           <div className="flex items-center gap-4">
-            <h1 className="font-display text-2xl font-bold tracking-wider">VELOVAQUEJO PRO</h1>
+            <h1 className="font-display text-2xl font-bold tracking-wider">TRACKJADA PRO</h1>
             <span className="inline-flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-success">
               <span className="h-1.5 w-1.5 rounded-full bg-success" />
               {backendLabel}

@@ -125,7 +125,7 @@ def _draw_page_decorations(canvas, doc) -> None:
     canvas.saveState()
     canvas.setFillColor(colors.HexColor("#111827"))
     canvas.setFont("Helvetica-Bold", 9)
-    canvas.drawString(14 * mm, height - 10.5 * mm, "VeloVaquejo Pro")
+    canvas.drawString(14 * mm, height - 10.5 * mm, "TrackJada Pro")
     canvas.setFont("Helvetica", 7.5)
     canvas.setFillColor(colors.HexColor("#475569"))
     canvas.drawRightString(
@@ -233,14 +233,14 @@ def build_session_report(report_data: dict[str, Any], output_dir: Path) -> Path:
         rightMargin=14 * mm,
         topMargin=14 * mm,
         bottomMargin=14 * mm,
-        title="VeloVaquejo Pro - Relatório de Sessão",
+        title="TrackJada Pro - Relatório de Sessão",
         author="Varquejada System",
     )
 
     story: list[Any] = []
     hero_left = Paragraph(
         (
-            "<font size='20' color='#111827'><b>VeloVaquejo Pro</b></font><br/>"
+            "<font size='20' color='#111827'><b>TrackJada Pro</b></font><br/>"
             "<font size='10' color='#475569'>Relatório automático da sessão de medição</font><br/><br/>"
             f"<font size='8.5' color='#64748b'>Gerado em {_format_value(report_data.get('generated_at'))}</font><br/>"
             f"<font size='8.5' color='#64748b'>Motivo: {_format_value(report_data.get('reason'))}</font>"

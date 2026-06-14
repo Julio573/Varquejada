@@ -37,7 +37,7 @@ import {
 export const Route = createFileRoute("/analysis")({
   head: () => ({
     meta: [
-      { title: "VeloVaquejo Pro — Análise de Velocidade" },
+      { title: "TrackJada Pro — Análise de Velocidade" },
       {
         name: "description",
         content: "Painel de análise com velocidade por tempo, consistência e tendências da corrida.",
@@ -212,7 +212,7 @@ function AnalysisPage() {
       setBackendError(null);
       syncSamplesFromSession(event.session);
 
-      if (event.type === "frame.update") {
+      if (event.type === "frame.update"  && "telemetry" in event) {
         setCurrentTelemetry(event.telemetry);
       }
     });
@@ -298,7 +298,7 @@ function AnalysisPage() {
           </div>
           <div>
             <div className="font-display text-xl font-bold tracking-wider">
-              VELO<span className="text-brand">VAQUEJO</span>
+              TRACK<span className="text-brand">JADA</span>
             </div>
             <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
               Análise de desempenho

@@ -103,7 +103,7 @@ ipcMain.handle("open-analysis-window", async () => {
   }
 
   analysisWindow = createAppWindow({
-    title: "VeloVaquejo Pro — Medições",
+    title: "TrackJada Pro — Medições",
     route: "/analysis",
     display: getPreferredDisplay(),
   });
@@ -138,7 +138,7 @@ ipcMain.handle("close-analysis-window", async () => {
 
 function createWindow() {
   mainWindow = createAppWindow({
-    title: "VeloVaquejo Pro",
+    title: "TrackJada Pro",
     route: "/",
     display: screen.getPrimaryDisplay(),
   });
