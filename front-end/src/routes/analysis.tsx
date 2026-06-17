@@ -37,7 +37,7 @@ import {
 export const Route = createFileRoute("/analysis")({
   head: () => ({
     meta: [
-      { title: "TrackJada Pro — Análise de Velocidade" },
+      { title: "VaqVision Pro — Análise de Velocidade" },
       {
         name: "description",
         content: "Painel de análise com velocidade por tempo, consistência e tendências da corrida.",
@@ -298,7 +298,7 @@ function AnalysisPage() {
           </div>
           <div>
             <div className="font-display text-xl font-bold tracking-wider">
-              TRACK<span className="text-brand">JADA</span>
+              VAQ<span className="text-brand">VISION</span>
             </div>
             <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
               Análise de desempenho

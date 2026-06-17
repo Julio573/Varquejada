@@ -21,15 +21,15 @@ class HorseTracker:
         self.model.to('cpu')
         
         # IA Config - Otimizada para Performance
-        self.conf_threshold = 0.30
+        self.conf_threshold = 0.50
         self.imgsz = 320 # Reduzido para fluidez total (CPU processing)
-        self.yolo_interval = 2 # Alivia a CPU (15 FPS de detecção com 30 FPS de interpolação)
+        self.yolo_interval = 1 # Alivia a CPU (15 FPS de detecção com 30 FPS de interpolação)
         self.frame_count = 0
         
         # MEMÓRIA TEMPORAL
         self.tracked_horses = {} 
         self.next_id = 0
-        self.max_lost_frames = 10 # Mais rigoroso
+        self.max_lost_frames = 2 # Mais rigoroso
         
         # TELEMETRIA PRO
         self.fps = 30.0

@@ -272,7 +272,7 @@ class ClickableSlider(QSlider):
             painter.drawPolygon(points)
 
 class Speedometer(QWidget):
-    """Widget de Multímetro/Velocímetro customizado baseado no design TrackJada."""
+    """Widget de Multímetro/Velocímetro customizado baseado no design VaqVision."""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.value = 0.0
@@ -514,7 +514,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.controller = controller
         self.frame_count = 0
-        self.setWindowTitle("TRACKJADA PRO")
+        self.setWindowTitle("VAQVISION PRO")
         self.setMinimumSize(1400, 900)
         
         # Assets dir

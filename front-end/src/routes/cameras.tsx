@@ -18,7 +18,7 @@ import { listCameraDevices, type CameraDeviceInfo } from "@/lib/camera-devices";
 export const Route = createFileRoute("/cameras")({
   head: () => ({
     meta: [
-      { title: "TrackJada Pro — Câmeras" },
+      { title: "VaqVision Pro — Câmeras" },
       {
         name: "description",
         content: "Selecione o dispositivo de câmera conectado que será usado pelo backend.",
@@ -251,7 +251,7 @@ function CamerasPage() {
           </div>
           <div>
             <div className="font-display text-xl font-bold tracking-wider">
-              TRACK<span className="text-brand">JADA</span>
+              VAQ<span className="text-brand">VISION</span>
             </div>
             <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
               Seleção de câmera

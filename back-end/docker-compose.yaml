@@ -1,0 +1,26 @@
+gest-db:
+  image: postgres:16
+  container_name: gest-db
+  restart: always
+  ports:
+    - "5432:5432"
+  environment:
+    POSTGRES_DB: userdb
+    POSTGRES_USER: admin
+    POSTGRES_PASSWORD: admin123
+
+minio-s3-local:
+  image: minio/minio
+  container_name: minio-access
+  environment:
+    - MINIO_ROOT_USER=minionadm
+    - MINIO_ROOT_PASSWORD=minioadm
+  ports:
+    - "9000:9000" # API
+    - "9001:9001" # Interface
+  command: server /data --console-address ":9001"
+  volumes:
+    - minio_data:/data
+
+volumes: 
+  minio_data:
