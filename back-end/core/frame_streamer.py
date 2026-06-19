@@ -68,98 +68,109 @@ class SessionFrameStreamer:
         assert self._loop is not None
 
         while not self._stop_event.is_set():
-            loop_started = time.perf_counter()
-            snapshot = self._manager.snapshot()
-            session_id = int(snapshot.get("session_id") or 0)
+            try:
+                loop_started = time.perf_counter()
+                snapshot = self._manager.snapshot()
+                session_id = int(snapshot.get("session_id") or 0)
 
-            if self._last_session_id != session_id:
-                self._tracker.reset()
-                self._last_session_id = session_id
-                self._last_calibration_signature = None
-                self._frame_index = 0
-                self._last_telemetry = {
-                    "speed_kmh": 0.0,
-                    "distance_m": 0.0,
-                    "timecode": "--:--.--",
-                    "fps": 0.0,
-                    "confidence": 0.0,
-                    "bbox": None,
-                    "center": None,
-                    "horse_bbox": None,
-                }
+                if self._last_session_id != session_id:
+                    self._tracker.reset()
+                    self._last_session_id = session_id
+                    self._last_calibration_signature = None
+                    self._frame_index = 0
+                    self._last_telemetry = {
+                        "speed_kmh": 0.0,
+                        "distance_m": 0.0,
+                        "timecode": "--:--.--",
+                        "fps": 0.0,
+                        "confidence": 0.0,
+                        "bbox": None,
+                        "center": None,
+                        "horse_bbox": None,
+                    }
 
-            calibration = snapshot.get("calibration") or None
-            calibration_signature = str(calibration) if calibration else None
-            if calibration and calibration_signature != self._last_calibration_signature:
-                try:
-                    self._tracker.setup_homography(calibration)
-                    self._last_calibration_signature = calibration_signature
-                except Exception as exc:
-                    self._manager.last_error = f"Falha ao aplicar calibração: {exc}"
+                calibration = snapshot.get("calibration") or None
+                calibration_signature = str(calibration) if calibration else None
+                if calibration and calibration_signature != self._last_calibration_signature:
+                    try:
+                        self._tracker.setup_homography(calibration)
+                        self._last_calibration_signature = calibration_signature
+                    except Exception as exc:
+                        self._manager.last_error = f"Falha ao aplicar calibração: {exc}"
 
-            if not snapshot.get("is_running") or snapshot.get("source_type") == "idle":
+                if not snapshot.get("is_running") or snapshot.get("source_type") == "idle":
+                    self._sleep(0.05)
+                    continue
+
+                if snapshot.get("is_paused"):
+                    self._broadcast_snapshot(snapshot, "session.snapshot")
+                    self._sleep(0.08)
+                    continue
+
+                ok, frame, frame_snapshot = self._manager.read_frame()
+                if not ok or frame is None:
+                    self._broadcast_snapshot(frame_snapshot, "session.updated", action="capture-ended")
+                    self._sleep(0.08)
+                    continue
+
+                self._frame_index += 1
+                fps = float(frame_snapshot.get("capture", {}).get("fps") or 30.0)
+                source_type = frame_snapshot.get("source_type")
+                analysis_stride = 1 if source_type != "video" else 3
+                should_analyze = source_type != "video" or (self._frame_index % analysis_stride == 0)
+
+                if should_analyze:
+                    processed_frame, telemetry = self._process_frame(frame, frame_snapshot)
+                    self._last_telemetry = telemetry
+                    session_snapshot = self._manager.update_telemetry(telemetry)
+                    frame_to_send = processed_frame
+                else:
+                    session_snapshot = self._manager.snapshot()
+                    telemetry = dict(session_snapshot.get("telemetry") or self._last_telemetry)
+                    # Mantém a última box desenhada nos frames intermediários para evitar flicker.
+                    frame_to_send = self._tracker.draw_tracking(frame, None, None)
+
+                frame_to_send = self._resize_frame(frame_to_send)
+                encoded_frame = self._encode_frame_bytes(frame_to_send)
+                if encoded_frame is None:
+                    self._sleep(0.02)
+                    continue
+
+                self._store_latest_frame(encoded_frame)
+
+                payload = FrameUpdateEvent(
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                    session=SessionSnapshot.model_validate(session_snapshot),
+                    frame=None,
+                    telemetry=SessionTelemetry.model_validate(telemetry),
+                )
+                self._broadcast(payload.model_dump(mode="json"))
+
+                speed_factor = max(0.1, float(frame_snapshot.get("speed") or 1.0))
+                if source_type == "video":
+                    target_interval = (1.0 / fps) / speed_factor
+                    elapsed = time.perf_counter() - loop_started
+                    if elapsed > target_interval * 1.5:
+                        frames_to_skip = int(elapsed / target_interval) - 1
+                        if frames_to_skip > 0:
+                            skipped_snapshot = self._manager.skip_frames(frames_to_skip)
+                            if skipped_snapshot.get("last_error"):
+                                self._broadcast_snapshot(skipped_snapshot, "session.updated", action="capture-ended")
+                                self._sleep(0.08)
+                                continue
+                    self._sleep(max(0.0, target_interval - elapsed))
+                else:
+                    self._sleep(0.001)
+            except RuntimeError as exc:
+                # Capture finished or released during this loop iteration
+                if "Não há captura ativa" in str(exc):
+                    self._sleep(0.05)
+                else:
+                    print(f"[STREAMER] Runtime error in loop: {exc}")
+                    self._sleep(0.05)
+            except Exception as exc:
+                print(f"[STREAMER] Unexpected error in loop: {exc}")
                 self._sleep(0.05)
-                continue
-
-            if snapshot.get("is_paused"):
-                self._broadcast_snapshot(snapshot, "session.snapshot")
-                self._sleep(0.08)
-                continue
-
-            ok, frame, frame_snapshot = self._manager.read_frame()
-            if not ok or frame is None:
-                self._broadcast_snapshot(frame_snapshot, "session.updated", action="capture-ended")
-                self._sleep(0.08)
-                continue
-
-            self._frame_index += 1
-            fps = float(frame_snapshot.get("capture", {}).get("fps") or 30.0)
-            source_type = frame_snapshot.get("source_type")
-            analysis_stride = 1 if source_type != "video" else 3
-            should_analyze = source_type != "video" or (self._frame_index % analysis_stride == 0)
-
-            if should_analyze:
-                processed_frame, telemetry = self._process_frame(frame, frame_snapshot)
-                self._last_telemetry = telemetry
-                session_snapshot = self._manager.update_telemetry(telemetry)
-                frame_to_send = processed_frame
-            else:
-                session_snapshot = self._manager.snapshot()
-                telemetry = dict(session_snapshot.get("telemetry") or self._last_telemetry)
-                # Mantém a última box desenhada nos frames intermediários para evitar flicker.
-                frame_to_send = self._tracker.draw_tracking(frame, None, None)
-
-            frame_to_send = self._resize_frame(frame_to_send)
-            encoded_frame = self._encode_frame_bytes(frame_to_send)
-            if encoded_frame is None:
-                self._sleep(0.02)
-                continue
-
-            self._store_latest_frame(encoded_frame)
-
-            payload = FrameUpdateEvent(
-                timestamp=datetime.now(timezone.utc).isoformat(),
-                session=SessionSnapshot.model_validate(session_snapshot),
-                frame=None,
-                telemetry=SessionTelemetry.model_validate(telemetry),
-            )
-            self._broadcast(payload.model_dump(mode="json"))
-
-            speed_factor = max(0.1, float(frame_snapshot.get("speed") or 1.0))
-            if source_type == "video":
-                target_interval = (1.0 / fps) / speed_factor
-                elapsed = time.perf_counter() - loop_started
-                if elapsed > target_interval * 1.5:
-                    frames_to_skip = int(elapsed / target_interval) - 1
-                    if frames_to_skip > 0:
-                        skipped_snapshot = self._manager.skip_frames(frames_to_skip)
-                        if skipped_snapshot.get("last_error"):
-                            self._broadcast_snapshot(skipped_snapshot, "session.updated", action="capture-ended")
-                            self._sleep(0.08)
-                            continue
-                self._sleep(max(0.0, target_interval - elapsed))
-            else:
-                self._sleep(0.001)
 
     def _process_frame(self, frame: Any, snapshot: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
         fps = float(snapshot.get("capture", {}).get("fps") or 30.0)
