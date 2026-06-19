@@ -1,0 +1,6 @@
+path: training/dataset
+train: images/train
+val: images/train  # Using train as val for now since we want to use all 2k images and don't have a split script ready, or I can just point to the roboflow val for a cleaner check
+
+nc: 2
+names: ['Boi', 'Cavalo']
