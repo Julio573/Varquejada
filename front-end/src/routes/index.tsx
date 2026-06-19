@@ -584,7 +584,7 @@ function Dashboard() {
   };
 
   return (
-    <div className="dark flex min-h-screen bg-background text-foreground">
+    <div className="dark flex h-screen overflow-hidden bg-background text-foreground">
       <input
         ref={fileInputRef}
         type="file"
@@ -643,7 +643,7 @@ function Dashboard() {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto bg-background text-foreground">
+      <main className="flex-1 flex flex-col h-full overflow-hidden bg-background text-foreground">
         <header className="flex items-center justify-between gap-4 border-b border-border px-8 py-4">
           <div className="flex items-center gap-4">
             <h1 className="font-display text-2xl font-bold tracking-wider">VAQVISION PRO</h1>
@@ -679,8 +679,8 @@ function Dashboard() {
           </div>
         )}
 
-        <div className="grid h-[calc(100vh-5.5rem)] grid-cols-12 gap-4 px-6 py-4 xl:px-8 xl:py-4">
-          <div className="col-span-12 flex min-h-0 flex-col gap-3 xl:col-span-9">
+        <div className="grid grid-cols-12 gap-4 px-6 py-4 xl:px-8 xl:py-4 flex-1 min-h-0">
+          <div className="col-span-12 flex flex-col gap-3 xl:col-span-9 h-full min-h-0">
             <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
               <KpiCard
                 icon={<Clock className="h-5 w-5" />}
@@ -705,16 +705,16 @@ function Dashboard() {
               />
             </div>
 
-            <section className="rounded-2xl border border-border bg-surface/60 p-3 backdrop-blur">
+            <section className="flex-1 min-h-0 flex flex-col rounded-2xl border border-border bg-surface/60 p-3 backdrop-blur">
               <div
                 ref={playerShellRef}
-                className="relative -mt-1 min-h-[560px] overflow-hidden rounded-2xl border border-border bg-black/90 xl:min-h-[680px]"
+                className="relative -mt-1 flex-1 min-h-0 overflow-hidden rounded-2xl border border-border bg-black/90"
                 onMouseEnter={handlePlayerMouseEnter}
                 onMouseMove={handlePlayerMouseMove}
                 onMouseLeave={handlePlayerMouseLeave}
               >
                 {hasMediaSource && videoUrl ? (
-                  <div className="relative h-full min-h-[560px] w-full xl:min-h-[680px]">
+                  <div className="relative h-full w-full">
                     <img
                       src={videoUrl}
                       alt="Stream processado pelo backend"
@@ -853,7 +853,7 @@ function Dashboard() {
                     ) : null}
                   </div>
                 ) : (
-                  <div className="flex h-full min-h-[560px] flex-col items-center justify-center px-8 text-center xl:min-h-[680px]">
+                  <div className="flex h-full w-full flex-col items-center justify-center px-8 text-center">
                     <div className="flex h-48 w-48 items-center justify-center rounded-full border-2 border-dashed border-brand/60 bg-brand/5">
                       <Upload className="h-12 w-12 text-brand" strokeWidth={1.5} />
                     </div>
@@ -879,7 +879,7 @@ function Dashboard() {
             </section>
           </div>
 
-          <div className="col-span-12 space-y-4 xl:col-span-3">
+          <div className="col-span-12 space-y-3 xl:col-span-3 h-full overflow-hidden pr-1">
             <Speedometer speed={currentSpeed} />
             <ToolsCard
               onOpenVideo={handleOpenVideoPicker}
@@ -1012,12 +1012,12 @@ function Speedometer({ speed }: { speed: number }) {
   );
 
   return (
-    <section className="rounded-2xl border border-border bg-surface/60 p-5 backdrop-blur">
+    <section className="rounded-2xl border border-border bg-surface/60 p-4 backdrop-blur">
       <h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
         Velocidade atual
       </h3>
-      <div className="mt-3 flex justify-center">
-        <svg width="220" height="140" viewBox="0 0 220 140">
+      <div className="mt-2 flex justify-center">
+        <svg width="200" height="120" viewBox="0 0 220 140">
           <defs>
             <linearGradient id="gauge" x1="0" y1="0" x2="1" y2="0">
               <stop offset="0%" stopColor="oklch(0.78 0.17 150)" />
@@ -1056,19 +1056,13 @@ function Speedometer({ speed }: { speed: number }) {
           })}
         </svg>
       </div>
-      <div className="-mt-12 text-center">
-        <div className="font-display text-5xl font-bold">{speed.toFixed(1)}</div>
-        <div className="text-xs font-semibold tracking-[0.2em] text-muted-foreground">KM/H</div>
-        <div className="mt-2 flex justify-between px-3 text-[10px] text-muted-foreground">
+      <div className="-mt-10 text-center">
+        <div className="font-display text-4xl font-bold">{speed.toFixed(1)}</div>
+        <div className="text-[10px] font-semibold tracking-[0.2em] text-muted-foreground">KM/H</div>
+        <div className="mt-1 flex justify-between px-3 text-[9px] text-muted-foreground">
           <span>0</span>
           <span>200</span>
         </div>
-      </div>
-      <div className="mt-4 flex items-center justify-between rounded-lg border border-border bg-background/60 px-3 py-2">
-        <span className="text-xs text-muted-foreground">Status</span>
-        <span className="rounded-full bg-success/15 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-success">
-          {speed > 0 ? "Em uso" : "Aguardando"}
-        </span>
       </div>
     </section>
   );
@@ -1105,23 +1099,23 @@ function ToolsCard({
     { icon: Flag, label: "Fim", tint: "brand", action: onAddEndMarker },
   ];
   return (
-    <section className="rounded-2xl border border-border bg-surface/60 p-5 backdrop-blur">
+    <section className="rounded-2xl border border-border bg-surface/60 p-4 backdrop-blur">
       <h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
         Ferramentas de precisão
       </h3>
-      <div className="mt-4 grid grid-cols-3 gap-2">
+      <div className="mt-3 grid grid-cols-3 gap-2">
         {tools.map(({ icon: Icon, label, tint, action }) => (
           <button
             key={label}
             onClick={action}
-            className="group flex flex-col items-center gap-1.5 rounded-xl border border-border bg-background/60 p-3 transition hover:border-brand/50 hover:bg-surface-2"
+            className="group flex flex-col items-center gap-1 rounded-xl border border-border bg-background/60 p-2 transition hover:border-brand/50 hover:bg-surface-2"
           >
             <span
-              className={`flex h-9 w-9 items-center justify-center rounded-lg ${tintMap[tint]}`}
+              className={`flex h-7 w-7 items-center justify-center rounded-lg ${tintMap[tint]}`}
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-3.5 w-3.5" />
             </span>
-            <span className="text-xs font-medium">{label}</span>
+            <span className="text-[11px] font-medium">{label}</span>
           </button>
         ))}
       </div>
@@ -1130,21 +1124,21 @@ function ToolsCard({
 }
 
 function RecentHistory({ markers }: { markers: Array<Record<string, unknown>> }) {
-  const recentMarkers = markers.slice(-3).reverse();
+  const recentMarkers = markers.slice(-2).reverse();
   return (
-    <section className="rounded-2xl border border-border bg-surface/60 p-5 backdrop-blur">
+    <section className="rounded-2xl border border-border bg-surface/60 p-4 backdrop-blur">
       <h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
         Histórico recente
       </h3>
       {recentMarkers.length > 0 ? (
-        <div className="mt-4 space-y-3">
+        <div className="mt-3 space-y-2">
           {recentMarkers.map((marker, index) => (
             <div
               key={`${String(marker.label ?? "marcador")}-${index}`}
-              className="flex items-start gap-3 rounded-xl border border-border bg-background/40 p-4"
+              className="flex items-start gap-2.5 rounded-xl border border-border bg-background/40 p-2.5"
             >
               <div
-                className="flex h-10 w-10 items-center justify-center rounded-lg text-xs font-bold text-background"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold text-background"
                 style={{ backgroundColor: String(marker.color ?? "#3B82F6") }}
               >
                 {String(marker.label ?? "?")
@@ -1152,8 +1146,8 @@ function RecentHistory({ markers }: { markers: Array<Record<string, unknown>> })
                   .toUpperCase()}
               </div>
               <div>
-                <div className="text-sm font-semibold">{String(marker.label ?? "Evento")}</div>
-                <p className="mt-0.5 text-xs text-muted-foreground">
+                <div className="text-xs font-semibold">{String(marker.label ?? "Evento")}</div>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">
                   {typeof marker.position_ms === "number"
                     ? formatClock(marker.position_ms / 1000)
                     : "Sem posição"}
@@ -1163,19 +1157,19 @@ function RecentHistory({ markers }: { markers: Array<Record<string, unknown>> })
           ))}
         </div>
       ) : (
-        <div className="mt-4 flex items-start gap-3 rounded-xl border border-dashed border-border bg-background/40 p-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+        <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-dashed border-border bg-background/40 p-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
             <FileQuestion className="h-4 w-4" />
           </div>
           <div>
-            <div className="text-sm font-semibold">Nenhuma medição realizada</div>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              As medições aparecerão aqui após serem concluídas.
+            <div className="text-xs font-semibold">Nenhuma medição</div>
+            <p className="mt-0.5 text-[10px] text-muted-foreground">
+              Aparecerão aqui após marcadas.
             </p>
           </div>
         </div>
       )}
-      <button className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-background/60 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition hover:border-brand/50 hover:text-foreground">
+      <button className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-background/60 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition hover:border-brand/50 hover:text-foreground">
         Ver todas as medições
         <ArrowRight className="h-3.5 w-3.5" />
       </button>
